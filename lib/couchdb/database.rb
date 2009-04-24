@@ -18,17 +18,16 @@ module CouchDB
     end
 
     def self.create(name)
-      instance = self[name] = new(name)
-      response.body = {"ok" => true}.to_json
-      instance
+      self[name] = new(name)
+      {"ok" => true}
     end
 
-    attr_reader :name
+    attr_reader :name, :docs
 
     def initialize(name)
       @name = name
-      @docs = RedBlackTree.new(Document.new('0'))
-      @doc_count = 1
+      @docs = RedBlackTree.new(Document.new('_'))
+      @doc_count = 0
       Innate.map(url, self)
     end
 
@@ -168,13 +167,13 @@ module CouchDB
 
     def insert(doc)
       @doc_count += 1
+      doc.rev!
       @docs.insert(doc)
+      return doc
     end
 
     def [](id)
-      if found = @docs.find(Document.new(id))
-        found.value
-      end
+      @docs.find_value(Document.new(id))
     end
   end
 end
