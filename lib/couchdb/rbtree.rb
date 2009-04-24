@@ -24,10 +24,26 @@ module CouchDB
       "[#{value},#{color}]"
     end
 
+    # Walk into the tree and find an exact match
     def find(key)
       return self if key == value
       return left.find(key) if left and key < value
       return right.find(key) if right
+    end
+
+    # Walk into the tree until we cannot find higher revisions, then return
+    # The tricky part is to have a revision that is higher than any other, but
+    # that's handled by the value, we only care about the id.
+    def find_latest(key)
+      return self if key == value
+      return left.find_latest(key) if left and key < value
+      return right.find_latest(key) if right
+      return self if key.id == value.id
+    end
+
+    def find_value(key)
+      found = find(key)
+      found.value if found
     end
 
     def each(&block)
