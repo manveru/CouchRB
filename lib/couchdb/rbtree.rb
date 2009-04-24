@@ -26,7 +26,7 @@ module CouchDB
 
     # Walk into the tree and find an exact match
     def find(key)
-      return self if key == value
+      return self if key == value unless deleted
       return left.find(key) if left and key < value
       return right.find(key) if right
     end
@@ -35,10 +35,10 @@ module CouchDB
     # The tricky part is to have a revision that is higher than any other, but
     # that's handled by the value, we only care about the id.
     def find_latest(key)
-      return self if key == value
+      return self if key == value unless deleted
       return left.find_latest(key) if left and key < value
       return right.find_latest(key) if right
-      return self if key.id == value.id
+      return self if key.id == value.id unless deleted
     end
 
     def find_value(key)
@@ -48,7 +48,7 @@ module CouchDB
 
     def each(&block)
       left.each(&block) if left
-      yield self
+      yield self unless deleted
       right.each(&block) if right
     end
 

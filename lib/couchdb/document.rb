@@ -5,25 +5,33 @@ module CouchDB
     attr_accessor :rev
     attr_reader :doc, :id
 
-    # The revision is handled special, CouchDB specifies that a revision cannot
-    # start with '_', so that's going to be our root Document that can never be
-    # queried out.
-    # If the rev is a symbol, it will have special meaning in comparision, more
-    # specifically, a :max rev for a Document with the same id will always be
-    # higher than any other Document.
-    # This enables us to find the latest revision of Documents in the
-    # RedBlackTree by simple comparision.
-    # A Document must have a String or nil rev to be inserted in the
-    # RedBlackTree, if the rev is nil we generate a random value for it.
-    def initialize(id, rev = '_', doc = {})
-      @id, @rev, @doc = id, rev, doc
+    # - id
+    #   * must be a String
+    #   * cannot start with '_'
+    #
+    # - rev
+    #   * must be a String
+    #   * cannot start with '_'
+    #
+    # The problem with revisions being a String is that the string comparision
+    # will consider '99' as being greater than '100', but '99'.next will return
+    # '100'. This wonderful idiocy can only be countered with even greater
+    # stupidity, internally we keep the revision as an integer, and convert
+    # in/out via base36, which is the most compact fast lossless conversion we
+    # have available, this way we can compare internally correct and fast using
+    # integers and present everybody outside with a String.
+    def initialize(id, rev, doc = {})
+      @id, @rev, @doc = id.to_str, rev.to_i(36), doc.dup
+
+      @doc.delete '_rev'
+      @doc.delete '_id'
     end
 
     def rev!
       if @rev
-        @rev.next!
+        @rev += 1
       else
-        @rev = SecureRandom.hex
+        @rev = 0
       end
     end
 
@@ -31,30 +39,36 @@ module CouchDB
       doc[key.to_s]
     end
 
+    # nasty business goes here
     def <=>(other)
-      raise(TypeError, "Not a Document") unless other.is_a?(self.class)
-
-      if rev
-        other_rev, other_id = other.rev, other.id
-
-        if id == other_id
-          if other_rev == :max
-            -1
-          elsif rev == :max
-            1
-          else
-            rev <=> other_rev # will raise if both are symbols (on 1.8)
-          end
+      case other
+      when Document::Max # ignore revision
+        comp = id <=> other.id
+        comp == 0 ? -1 : comp
+      when Document::Min # ignore revision
+        comp = id <=> other.id
+        comp == 0 ? 1 : comp
+      when Document
+        if rev = self.rev
+          [id, rev] <=> [other.id, other.rev]
         else
-          [id, rev] <=> [other_id, other_rev]
+          id <=> other.id
         end
       else
-        id <=> other.id
+        raise(TypeError, "Not a Document")
       end
     end
 
     def to_json
-      @doc.merge('_id' => id, '_rev' => rev).to_json
+      @doc.merge(_version_hash).to_json
+    end
+
+    def version_hash
+      {'id' => id, 'rev' => rev.to_s(36)}
+    end
+
+    def _version_hash
+      {'_id' => id, '_rev' => rev.to_s(36)}
     end
 
     def to_hash
@@ -68,6 +82,22 @@ module CouchDB
           { "rev" => "2142263084", "status" => "available" },
         ]
       }
+    end
+
+    # This document is smaller than any other of the same revision
+    class Min < self
+      def <=>(other)
+        comp = id <=> other.id
+        comp == 0 ? -1 : comp
+      end
+    end
+
+    # This document is larger than any other of the same revision
+    class Max < self
+      def <=>(other)
+        comp = id <=> other.id
+        comp == 0 ? 1 : comp
+      end
     end
   end
 end

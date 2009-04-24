@@ -32,7 +32,6 @@ class Doc < Struct.new(:id, :rev)
   end
 end
 
-
 describe CouchDB::RedBlackTree do
   it 'inserts and iterates' do
     values = [11,4,8,14,17,6,9,7,16,2,15,13,5,19,18,12,10,3,20,1]

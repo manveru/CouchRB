@@ -26,7 +26,7 @@ module CouchDB
 
     def initialize(name)
       @name = name
-      @docs = RedBlackTree.new(Document.new('_'))
+      @docs = RedBlackTree.new(Document::Min.new('_', '0'))
       @doc_count = 0
       Innate.map(url, self)
     end
@@ -78,7 +78,12 @@ module CouchDB
             body = put_doc(path, json)
           end
         when 'DELETE'
-          delete_doc(path)
+          if rev = request['rev']
+            body = delete_doc(path, rev)
+          else
+            response.status = 409
+            body = {"error" => "conflict", "reason" => "Document update conflict."}
+          end
         else
           response.status = 405
         end
@@ -103,10 +108,10 @@ module CouchDB
     end
 
     def find_doc(id)
-      query = Document.new(id, nil)
+      query = Document::Max.new(id, '0')
 
-      if found = @docs.find_value(query)
-        found
+      if found = @docs.find_latest(query)
+        found.value
       else
         response.status = 404
         {"error" => "not_found", "reason" => "missing"}
@@ -114,15 +119,14 @@ module CouchDB
     end
 
     def put_doc(id, hash)
-      doc = Document.new(id, nil, hash)
+      needle = Document::Max.new(id, '0')
 
-      if found = @docs.find_value(doc)
-        doc.rev = found.rev
-        insert(doc)
-        {'ok' => true, 'id' => doc.id, 'rev' => doc.rev}
+      if found = @docs.find_latest(needle)
+        response.status = 409
+        {"error" => "conflict", "reason" => "Document update conflict."}
       else
-        doc = insert(Document.new(id, nil, hash))
-        {'ok' => true, 'id' => doc.id, 'rev' => doc.rev}
+        doc = insert(Document.new(id, '0', hash))
+        doc.version_hash.merge('ok' => true)
       end
     end
 
@@ -130,24 +134,27 @@ module CouchDB
       doc = Document.new(id, rev, hash)
 
       if found = @docs.find_value(doc)
-        insert(doc)
+        doc.rev!
+        @docs.insert(doc) # avoid increasing the count
 
-        {'ok' => true, 'id' => doc.id, 'rev' => doc.rev}
+        doc.version_hash.merge('ok' => true)
       else
         response.status = 404
         {"error" => "not_found", "reason" => "missing"}
       end
-
-      # {"error" => "conflict", "reason" => "Document update conflict."}
     end
 
-    def delete_doc(id)
-      if found = self[id]
-        @docs.delete(id)
-      else
-      end
+    def delete_doc(id, rev)
+      needle = Document.new(id, rev)
 
-      {'ok' => true}
+      if found = @docs.find_value(needle)
+        @docs.delete(found)
+        @doc_count -= 1
+        found.version_hash.merge("ok" => true)
+      else
+        response.status = 404
+        {"error" => "not_found", "reason" => "missing"}
+      end
     end
 
     def info
