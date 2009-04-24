@@ -61,20 +61,22 @@ module CouchDB
           if request['revs_info']
             body = Document.refs_info
           else
-            body = self[path]
+            body = find_doc(path)
           end
         when 'POST'
-          if path == '_temp_view'
+          case path
+          when '_temp_view'
             body = temp_view(JSON.parse(request.body.read))
           else
-            pp request
-            raise
+            response.status = 405
           end
         when 'PUT'
-          if rev = request[:rev]
-            body = update_doc(path, rev, JSON.parse(request.body.read))
+          json = JSON.parse(request.body.read)
+
+          if rev = json['_rev']
+            body = update_doc(path, rev, json)
           else
-            body = put_doc(path, JSON.parse(request.body.read))
+            body = put_doc(path, json)
           end
         when 'DELETE'
           delete_doc(path)
@@ -101,23 +103,43 @@ module CouchDB
       end
     end
 
-    def put_doc(id, hash)
-      query = Document.new(id)
+    def find_doc(id)
+      query = Document.new(id, nil)
 
-      if doc = @docs.find(query)
-        {'ok' => false, 'id' => doc.id, 'rev' => doc.value.rev}
+      if found = @docs.find_value(query)
+        found
       else
-        insert(Document.new(id, '1', hash))
+        response.status = 404
+        {"error" => "not_found", "reason" => "missing"}
+      end
+    end
+
+    def put_doc(id, hash)
+      doc = Document.new(id, nil, hash)
+
+      if found = @docs.find_value(doc)
+        doc.rev = found.rev
+        insert(doc)
+        {'ok' => true, 'id' => doc.id, 'rev' => doc.rev}
+      else
+        doc = insert(Document.new(id, nil, hash))
         {'ok' => true, 'id' => doc.id, 'rev' => doc.rev}
       end
     end
 
     def update_doc(id, rev, hash)
-      query = Document.new(id, rev)
-      doc = @docs.find(query)
-      doc.update_from(hash)
+      doc = Document.new(id, rev, hash)
 
-      {'ok' => true, 'id' => doc.id, 'rev' => doc.rev}
+      if found = @docs.find_value(doc)
+        insert(doc)
+
+        {'ok' => true, 'id' => doc.id, 'rev' => doc.rev}
+      else
+        response.status = 404
+        {"error" => "not_found", "reason" => "missing"}
+      end
+
+      # {"error" => "conflict", "reason" => "Document update conflict."}
     end
 
     def delete_doc(id)
