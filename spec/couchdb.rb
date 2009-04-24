@@ -1,43 +1,7 @@
-require 'lib/couchdb'
-require 'ramaze/spec'
-
-Innate.middleware!(:couchdb) do |m|
-  m.innate
-end
-
-Innate.options.mode = :couchdb
+require 'spec/helper'
 
 describe 'basics' do
-  behaves_like :mock
-
-  def json_body
-    JSON.parse(last_response.body)
-  end
-
-  def put_doc(url, doc)
-    json = doc.to_json
-
-    header 'CONTENT_LENGTH', json.bytesize
-    header 'CONTENT_TYPE', 'application/json'
-    header :input, json
-    put(url)
-  end
-
-  def post_doc(url, doc)
-    json = doc.to_json
-
-    header 'CONTENT_LENGTH', json.bytesize
-    header 'CONTENT_TYPE', 'application/json'
-    header :input, json
-    post(url)
-  end
-
-  def query(url, hash = {})
-    doc = {'language' => 'ruby'}
-    doc['map'] = hash[:map] if hash[:map]
-    doc['reduce'] = hash[:reduce] if hash[:reduce]
-    post_doc(url, doc)
-  end
+  behaves_like :couch_client
 
   it 'shows version on /' do
     get('/').status.should == 200
@@ -73,7 +37,8 @@ describe 'basics' do
   end
 
   should 'create a document and save it to the database' do
-    put_doc('/test_suite_db/0', '_id' => '0', 'a' => 1, 'b' => 1)
+    put_doc('/test_suite_db/0', 'a' => 1, 'b' => 1)
+    last_response.status.should == 200
 
     body = json_body
     body['ok'].should == true
@@ -82,7 +47,7 @@ describe 'basics' do
   end
 
   should 'make sure the revs_info status is good' do
-    get('/test_suite_db/1', :revs_info => true)
+    get('/test_suite_db/1', :revs_info => true).status.should == 200
     json_body['_revs_info'].first['status'].should == 'available'
   end
 
@@ -116,12 +81,12 @@ end
   end
 
   should 'reopen document we saved earlier' do
-    get('/test_suite_db/0')
+    get('/test_suite_db/0').status.should == 200
     json_body['a'].should == 1
   end
 
-  should 'modify a document and save' do
-    get('/test_suite_db/0')
+  should 'modify and save a document' do
+    get('/test_suite_db/0').status.should == 200
     body = json_body
     body['a'] = 4
     put_doc('/test_suite_db/0', body)
@@ -131,6 +96,9 @@ end
     @first_doc = json_body # keep it around for later reference
     @first_doc['a'].should == 4
   end
+end
+
+__END__
 
   should 'show the modified doc in the new map results' do
     query('/test_suite_db/_temp_view', :map => @map)
