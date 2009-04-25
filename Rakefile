@@ -4,7 +4,7 @@ require 'rake/gempackagetask'
 require 'time'
 require 'date'
 
-PROJECT_SPECS = Dir['spec/**/*.rb']
+PROJECT_SPECS = Dir['spec/couchrb/**/*.rb']
 PROJECT_MODULE = 'CouchRB'
 PROJECT_COPYRIGHT =
   '# Copyright (c) 2009 Michael Fellinger <m.fellinger@gmail.com>'
