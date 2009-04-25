@@ -1,7 +1,7 @@
 require 'spec/helper'
 
-describe CouchDB::Document do
-  D = CouchDB::Document
+describe CouchRB::Document do
+  D = CouchRB::Document
 
   it 'should be comparable by id' do
     dog = D.new('dog', '0', 'dog' => true)

@@ -1,4 +1,4 @@
-module CouchDB
+module CouchRB
   RED_BLACK_TREE_MEMBERS = [ :value, :color, :left, :right, :deleted ]
 
   class RedBlackTree < Struct.new(*RED_BLACK_TREE_MEMBERS)

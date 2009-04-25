@@ -1,4 +1,4 @@
-module CouchDB
+module CouchRB
   class ViewContext
     attr_reader :results
 

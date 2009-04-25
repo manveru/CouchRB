@@ -1,4 +1,4 @@
-module CouchDB
+module CouchRB
   class Database
     include Innate::Trinity
     extend Innate::Trinity
@@ -52,8 +52,8 @@ module CouchDB
           response.status = 405
         end
       else
-#         pp :path => path
-#         pp :method => method
+        # pp :path => path
+        # pp :method => method
 
         case method
         when 'GET'

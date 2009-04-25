@@ -1,6 +1,3 @@
-
-
-
 require 'thread'
 require 'open3'
 require 'pp'
@@ -44,12 +41,3 @@ Open3.popen3('js -i'){|stdin, stdout, stderr|
     end
   end while running
 }
-
-__END__
-
-require 'lib/couchdb/seamonkey'
-
-sm = CouchDB::SeaMonkey.new
-sm.spawn
-sm.puts 'print("Hello, World!");'
-# sm.kill

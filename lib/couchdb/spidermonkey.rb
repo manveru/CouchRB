@@ -1,7 +1,7 @@
 require 'open3'
 require 'thread'
 
-module CouchDB
+module CouchRB
   # Abstract communication with the SpiderMonkey javascript interpreter
   #
   # This started out as a grand plan, but after 3 hours of messing around I

@@ -8,7 +8,7 @@ require 'couchdb/document'
 require 'couchdb/view_context'
 require 'couchdb/database'
 
-module CouchDB
+module CouchRB
   extend Innate::Trinity
 
   def self.call(env)
