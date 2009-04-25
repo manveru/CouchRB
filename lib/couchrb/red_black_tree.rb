@@ -26,7 +26,7 @@ module CouchRB
 
     # Walk into the tree and find an exact match
     def find(key)
-      return self if key == value unless deleted
+      return self if key == value
       return left.find(key) if left and key < value
       return right.find(key) if right
     end

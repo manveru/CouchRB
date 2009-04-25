@@ -57,7 +57,11 @@ module CouchRB
     response['Pragma'] = 'no-cache'
     response['Expires'] = Time.now.httpdate
     response['Date'] = Time.now.httpdate
-    {'uuids' => Array.new(count){ SecureRandom.hex }}
+    {'uuids' => Array.new(count){ uuid }}
+  end
+
+  def self.uuid
+    SecureRandom.hex
   end
 
   Innate.map('/', self)

@@ -34,63 +34,79 @@ module CouchRB
     def call(env)
       path = (env['PATH_INFO'] || '').sub(/^\//, '')
       method = env['REQUEST_METHOD']
-      body = nil
+      hash = {}
+
+      if req_body = request.body.read
+        begin
+        hash = JSON.parse(req_body)
+        rescue
+        end
+      end
 
       if path.empty?
-        case method
-        when 'GET'
-          body = info
-        when 'DELETE'
-          body = delete
-        when 'PUT'
-          response.status = 412
-          body = {
-            'error'  => 'file_exists',
-            'reason' => 'The database could not be created, the file already exists.'
-          }
-        else
-          response.status = 405
-        end
+        body = process_empty(method, hash)
       else
-        # pp :path => path
-        # pp :method => method
-
-        case method
-        when 'GET'
-          if request['revs_info']
-            body = Document.refs_info
-          else
-            body = find_doc(path)
-          end
-        when 'POST'
-          case path
-          when '_temp_view'
-            body = temp_view(JSON.parse(request.body.read))
-          else
-            response.status = 405
-          end
-        when 'PUT'
-          json = JSON.parse(request.body.read)
-
-          if rev = json['_rev']
-            body = update_doc(path, rev, json)
-          else
-            body = put_doc(path, json)
-          end
-        when 'DELETE'
-          if rev = request['rev']
-            body = delete_doc(path, rev)
-          else
-            response.status = 409
-            body = {"error" => "conflict", "reason" => "Document update conflict."}
-          end
-        else
-          response.status = 405
-        end
+        body = process_path(method, path, hash)
       end
 
       response.body = body.to_json if body
       response.finish
+    end
+
+    def process_empty(method, hash = {})
+      case method
+      when 'GET'
+        info
+      when 'DELETE'
+        delete
+      when 'PUT'
+        if hash.empty?
+          response.status = 412
+          { 'error'  => 'file_exists',
+            'reason' => 'The database could not be created, the file already exists.'
+          }
+        else
+          process_path(method, CouchRB.uuid)
+        end
+      else
+        response.status = 405
+        nil
+      end
+    end
+
+    def process_path(method, path, hash = {})
+      case method
+      when 'GET'
+        if request['revs_info']
+          Document.refs_info
+        elsif rev = request[:rev]
+          find_doc(path, rev)
+        else
+          latest_doc(path)
+        end
+      when 'POST'
+        case path
+        when '_temp_view'
+          temp_view(hash)
+        else
+          response.status = 405
+          nil
+        end
+      when 'PUT'
+        if rev = hash['_rev']
+          update_doc(path, rev, hash)
+        else
+          put_doc(path, hash)
+        end
+      when 'DELETE'
+        if rev = request['rev']
+          delete_doc(path, rev)
+        else
+          delete_latest_doc(path)
+        end
+      else
+        response.status = 405
+      end
     end
 
     def temp_view(query)
@@ -107,7 +123,18 @@ module CouchRB
       end
     end
 
-    def find_doc(id)
+    def find_doc(id, rev)
+      query = Document.new(id, rev)
+
+      if found = @docs.find_value(query)
+        found
+      else
+        response.status = 404
+        {"error" => "not_found", "reason" => "missing"}
+      end
+    end
+
+    def latest_doc(id)
       query = Document::Max.new(id, '0')
 
       if found = @docs.find_latest(query)
@@ -126,6 +153,7 @@ module CouchRB
         {"error" => "conflict", "reason" => "Document update conflict."}
       else
         doc = insert(Document.new(id, '0', hash))
+        response['Location'] = "/#{name}/#{doc.id}"
         doc.version_hash.merge('ok' => true)
       end
     end
@@ -151,6 +179,19 @@ module CouchRB
         @docs.delete(found)
         @doc_count -= 1
         found.version_hash.merge("ok" => true)
+      else
+        response.status = 404
+        {"error" => "not_found", "reason" => "missing"}
+      end
+    end
+
+    def delete_latest_doc(id)
+      needle = Document::Max.new(id, '0')
+
+      if found = @docs.find_latest(needle)
+        @docs.delete(found)
+        @doc_count -= 1
+        found.version_hash.merge('ok' => true)
       else
         response.status = 404
         {"error" => "not_found", "reason" => "missing"}

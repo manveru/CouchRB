@@ -146,4 +146,22 @@ describe 'basics' do
     get('/test_suite_db')
     json_body['doc_count'].should == 5
   end
+
+  should 'still be able open the old rev of the deleted doc' do
+    get("/test_suite_db/#@id", :rev => @rev).status.should == 200
+  end
+
+  it 'should set a Location header on POST' do
+    put_doc('/test_suite_db', 'foo' => 'bar').status.should == 200
+    body = json_body
+    location = last_response['Location']
+    location.should.not.be.nil?
+    atoms = location.split('/')
+    atoms[1].should == 'test_suite_db'
+    atoms[2].should == body['id']
+  end
+
+  should 'return 404 when deleting a non-existent document' do
+    delete('/test_suite_db/doc-does-not-exist').status.should == 404
+  end
 end
