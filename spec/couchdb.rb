@@ -67,13 +67,7 @@ describe 'basics' do
   end
 
   should 'process a simple map function' do
-    @map = <<-RB.strip
-lambda do |doc|
-  if doc['a'] == 4
-    emit nil, doc['b']
-  end
-end
-    RB
+    @map = 'lambda{|doc| emit(nil, doc["b"]) if doc["a"] == 4 }'
 
     query('/test_suite_db/_temp_view', :map => @map)
     body = json_body
@@ -124,11 +118,7 @@ end
   end
 
   it 'processes a map/reduce query' do
-    @reduce = <<-RB.strip
-lambda do |keys, values|
-  sum(values)
-end
-    RB
+    @reduce = 'lambda{|keys, values| sum(values) }'
 
     query('/test_suite_db/_temp_view', :map => @map, :reduce => @reduce)
     body = json_body
