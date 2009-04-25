@@ -1,12 +1,12 @@
-require 'lib/couchdb'
+require File.expand_path('../../lib/couchrb', __FILE__)
 require 'ramaze/spec'
 
 shared :couch_client do
-  Innate.middleware!(:couchdb) do |m|
+  Innate.middleware!(:couchrb) do |m|
     m.innate
   end
 
-  Innate.options.mode = :couchdb
+  Innate.options.mode = :couchrb
 
   behaves_like :mock
 

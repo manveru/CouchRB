@@ -3,10 +3,10 @@ require 'json'
 
 require 'innate'
 
-require 'couchdb/red_black_tree'
-require 'couchdb/document'
-require 'couchdb/view_context'
-require 'couchdb/database'
+require 'couchrb/red_black_tree'
+require 'couchrb/document'
+require 'couchrb/view_context'
+require 'couchrb/database'
 
 module CouchRB
   extend Innate::Trinity
