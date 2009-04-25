@@ -1,10 +1,10 @@
-require 'lib/binary_tree'
+require 'spec/helper'
 require 'bacon'
 Bacon.summary_at_exit
 
-describe BinaryTree do
+describe CouchRB::BinaryTree do
   it 'initializes' do
-    @tree = BinaryTree.new(10)
+    @tree = CouchRB::BinaryTree.new(10)
     @tree.value.should == 10
   end
 
@@ -34,10 +34,10 @@ describe BinaryTree do
   end
 
   it 'generates larger trees' do
-    ascending_tree = BinaryTree.new(0)
+    ascending_tree = CouchRB::BinaryTree.new(0)
     (1..100).each{|n| ascending_tree << n }
 
-    descending_tree = BinaryTree.new(100)
+    descending_tree = CouchRB::BinaryTree.new(100)
     (0..99).each{|n| descending_tree << n }
 
     ascending, descending = [], []

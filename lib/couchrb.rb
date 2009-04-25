@@ -3,7 +3,10 @@ require 'json'
 
 require 'innate'
 
+$LOAD_PATH.unshift(File.expand_path('../', __FILE__))
+
 require 'couchrb/red_black_tree'
+require 'couchrb/binary_tree'
 require 'couchrb/document'
 require 'couchrb/view_context'
 require 'couchrb/database'
