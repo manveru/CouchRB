@@ -34,6 +34,8 @@ module CouchRB
       case path
       when '_replicate'
         response.status = 501
+      when '_uuids'
+        response.status = 405
       else
         response.status = 501
       end
