@@ -3,7 +3,7 @@ require 'json'
 
 require 'innate'
 
-require 'couchdb/rbtree'
+require 'couchdb/red_black_tree'
 require 'couchdb/document'
 require 'couchdb/view_context'
 require 'couchdb/database'

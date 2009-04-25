@@ -1,4 +1,4 @@
-require 'lib/couchdb/rbtree'
+require 'lib/couchdb/red_black_tree'
 require 'bacon'
 Bacon.summary_at_exit
 
