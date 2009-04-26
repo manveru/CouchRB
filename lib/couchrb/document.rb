@@ -25,7 +25,9 @@ module CouchRB
       self.doc.delete '_id'
     end
 
-    def rev!
+    def rev!(sequence)
+      self.seq = sequence
+
       if rev
         self.rev += 1
       else
