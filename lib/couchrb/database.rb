@@ -26,8 +26,9 @@ module CouchRB
 
     def initialize(name)
       @name = name
-      @docs = RedBlackTree.new(Document::Min.new('_', '0'))
+      @docs = RedBlackTree.new(Document.new('_', '0'))
       @doc_count = 0
+      @update_sequence = 0
       Innate.map(url, self)
     end
 
@@ -38,8 +39,8 @@ module CouchRB
 
       if req_body = request.body.read
         begin
-        hash = JSON.parse(req_body)
-        rescue
+          hash = JSON.parse(req_body)
+        rescue JSON::ParserError
         end
       end
 
@@ -77,12 +78,26 @@ module CouchRB
     def process_path(method, path, hash = {})
       case method
       when 'GET'
-        if request['revs_info']
-          Document.refs_info
-        elsif rev = request[:rev]
-          find_doc(path, rev)
+        case path
+        when '_all_docs'
+          if request[:descending]
+            rows = @docs.all_descending
+          else
+            rows = @docs.all_ascending
+          end
+
+          {:total_rows => rows.size, :rows => rows, :offset => 2}
+        when '_all_docs_by_seq'
+          rows = @docs.all_by_seq
+          {:total_rows => rows.size, :rows => rows, :offset => 0}
         else
-          latest_doc(path)
+          if request['revs_info']
+            Document.refs_info
+          elsif rev = request[:rev]
+            find_doc(path, rev)
+          else
+            latest_doc(path)
+          end
         end
       when 'POST'
         case path
@@ -162,7 +177,7 @@ module CouchRB
       doc = Document.new(id, rev, hash)
 
       if found = @docs.find_value(doc)
-        doc.rev!
+        doc.rev!(updated!)
         @docs.insert(doc) # avoid increasing the count
 
         doc.version_hash.merge('ok' => true)
@@ -215,13 +230,19 @@ module CouchRB
 
     def insert(doc)
       @doc_count += 1
-      doc.rev!
+      doc.rev!(updated!)
       @docs.insert(doc)
       return doc
     end
 
     def [](id)
       @docs.find_value(Document.new(id))
+    end
+
+    private
+
+    def updated!
+      @update_sequence += 1
     end
   end
 end

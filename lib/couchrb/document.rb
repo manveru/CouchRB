@@ -1,9 +1,6 @@
 module CouchRB
-  class Document
+  class Document < Struct.new(:id, :rev, :doc, :seq)
     include Comparable
-
-    attr_accessor :rev
-    attr_reader :doc, :id
 
     # - id
     #   * must be a String
@@ -21,17 +18,18 @@ module CouchRB
     # have available, this way we can compare internally correct and fast using
     # integers and present everybody outside with a String.
     def initialize(id, rev, doc = {})
-      @id, @rev, @doc = id.to_str, rev.to_i(36), doc.dup
+      self.id, self.rev, self.doc =
+        id.to_str, rev.to_i(36), doc.dup
 
-      @doc.delete '_rev'
-      @doc.delete '_id'
+      self.doc.delete '_rev'
+      self.doc.delete '_id'
     end
 
     def rev!
-      if @rev
-        @rev += 1
+      if rev
+        self.rev += 1
       else
-        @rev = 0
+        self.rev = 0
       end
     end
 
@@ -60,7 +58,7 @@ module CouchRB
     end
 
     def to_json
-      @doc.merge(_version_hash).to_json
+      doc.merge(version_hash).to_json
     end
 
     def version_hash
@@ -72,7 +70,7 @@ module CouchRB
     end
 
     def to_hash
-      @doc.dup
+      doc.dup
     end
 
     def self.refs_info

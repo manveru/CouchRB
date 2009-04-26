@@ -77,6 +77,30 @@ module CouchRB
       right.to_dot(io, value) if right
     end
 
+    def to_json(all = [])
+      left.to_json(all) if left
+      all << value.to_json
+      right.to_json(all) if right
+      all
+    end
+
+    def all_ascending(all = [])
+      left.all_ascending(all) if left
+      all << value if value.id != '_'
+      right.all_ascending(all) if right
+      all
+    end
+
+    def all_descending(all = [])
+      right.all_descending(all) if right
+      all << value if value.id != '_'
+      left.all_descending(all) if left
+      all
+    end
+
+    def all_by_seq(all = [])
+    end
+
     def delete(key)
       return destroy if key == value
       return left.delete(key) if left and key < value
