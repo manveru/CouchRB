@@ -1,4 +1,5 @@
 require 'digest/md5'
+require 'couchrb/erlang_term'
 
 module CouchRB
   # Attempts to read (and eventually write) the CouchDB files directly.
@@ -20,14 +21,20 @@ module CouchRB
 
     def parse
       File.open(@path, 'r:ASCII-8BIT'){|io|
+        puts " (Headers ".center(80, "=")
         header = parse_headers(io)
+        puts " Headers) ".center(80, "=")
         parse_documents(io)
       }
     end
 
     # unimplemented
     def parse_documents(io)
-      # io.read(100).unpack('a*')
+      if io.eof?
+        @documents = []
+      else
+        ErlangTerm.parse(io)
+      end
     end
 
     def parse_headers(io)
@@ -125,6 +132,7 @@ module CouchRB
 
       def parse_body
         @body = @io.read(BODY_SIZE)
+        @terms = ErlangTerm.parse(StringIO.new(@body))
       end
 
       def parse_md5
