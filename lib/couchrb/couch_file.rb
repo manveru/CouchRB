@@ -19,22 +19,20 @@ module CouchRB
       @path = path
     end
 
-    def parse
+    def parse(&block)
       File.open(@path, 'r:ASCII-8BIT'){|io|
-        puts " (Headers ".center(80, "=")
         header = parse_headers(io)
-        puts " Headers) ".center(80, "=")
-        parse_documents(io)
+        parse_documents(io, &block)
       }
     end
 
     # unimplemented
-    def parse_documents(io)
-      if io.eof?
-        @documents = []
-      else
-        ErlangTerm.parse(io)
-      end
+    def parse_documents(io, &block)
+      raise(ArgumentError, "IO is at EOF") if io.eof?
+
+      @documents = []
+
+      ErlangTerm.new(io).parse(&block)
     end
 
     def parse_headers(io)

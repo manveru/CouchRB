@@ -34,7 +34,7 @@ module CouchRB
   # Alright, this works... somewhat, there are some things that the spec didn't
   # tell us expclicitly, and thank god that CouchDB doesn't use the compressed
   # serialization (guess for performance reasons?).
-  module ErlangTerm
+  class ErlangTerm
     TYPE_MAP = {
        67 => :cached_atom_ext,
        70 => :new_float_ext,
@@ -57,34 +57,42 @@ module CouchRB
       113 => :export_ext,
       114 => :new_reference_ext,
       117 => :fun_ext,
-      131 => :term_ext,
+      131 => :term,
     }
-    TYPE_IDS = TYPE_MAP.keys
 
-    def self.parse(io)
-      while result = step(io)
-        case result
-        when :null, :skip, :nil
+    attr_reader :io
+
+    def initialize(io)
+      @io = io
+    end
+
+    def parse
+      if block_given?
+        while step = walking
+          yield step
+        end
+      else
+        Enumerable::Enumerator.new(self, :parse)
+      end
+    end
+
+    def walking
+      until io.eof?
+        case result = step
+        when :null, :weird, nil
         else
-          yield(result) if block_given?
+          return result
         end
       end
     end
 
-    def self.step(io)
-      return unless tag = io.read(1)
-
-      id = tag.unpack('H*')[0].to_i(16)
-
-      case id
-      when 0, "\000", /0/; :null
-      when 106; :nil
+    def step
+      case id = read(1)
+      when 0;   :null
+      when 106; []
       else
-        if handler = TYPE_MAP[id]
-          send(handler, io)
-        else
-          :skip
-        end
+        handler = TYPE_MAP[id]
+        handler ? send(handler) : :weird
       end
     end
 
@@ -93,12 +101,8 @@ module CouchRB
     #
     # When the atom cache is in use, index is the slot number in which the
     # atom MUST be located.
-    def self.cached_atom_ext(io)
-      index = io.read(1).unpack('H*')[0].to_i(16)
-
-      log "Atom (cached)", :index => index
-
-      index
+    def cached_atom_ext
+      read(1)
     end
 
     # 1  | 8
@@ -106,12 +110,8 @@ module CouchRB
     #
     # A float is stored as 8 bytes in big-endian IEEE format. This term is used
     # in minor version 1 of the external format.
-    def self.new_float_ext(io)
-      float = io.read(8).unpack('g')[0]
-
-      log "Float (new)", :float => float
-
-      float
+    def new_float_ext
+      read(8)
     end
 
     # | 1  | 4      | 1    | Length
@@ -123,14 +123,10 @@ module CouchRB
     # The Bits field is the number of bits that are used in the last byte in
     # the data field, counting from the most significant bit towards the least
     # significant.
-    def self.bit_binary_ext(io)
-      length = io.read(4).unpack('N')[0]
-      bits   = io.read(1).unpack('H*')[0].to_i(16)
+    def bit_binary_ext
+      length = read(4)
+      bits   = read(1)
       data   = io.read(length)
-
-      log "Binary (bit)", :length => length, :bits => bits, :data => data
-
-      data
     end
 
     # | 1  | 1     | 2      | Length
@@ -140,12 +136,10 @@ module CouchRB
     # the atom cache in the location given by index.
     # The atom cache is currently only used between real Erlang nodes (not
     # between Erlang nodes and C or Java nodes).
-    def self.new_cache_ext(io)
-      index     = io.read(1).unpack('H*')[0]
-      length    = io.read(2).unpack('n')[0]
+    def new_cache_ext
+      index     = read(1)
+      length    = read(2)
       atom_name = io.read(length)
-
-      log "Cache (new)", :index => index, :length => length, :atom_name => atom_name
 
       [index, atom_name]
     end
@@ -154,24 +148,16 @@ module CouchRB
     # | 98 | Int
     #
     # Signed 32 bit integer in big-endian format (i.e. MSB first)
-    def self.small_integer_ext(io)
-      int = io.read(4).unpack('n')[0]
-
-      log "Integer (small)", :int => int
-
-      int
+    def small_integer_ext
+      read(4)
     end
 
     # | 1  | 4
     # | 98 | Int
     #
     # Signed 32 bit integer in big-endian format (i.e. MSB first)
-    def self.integer_ext(io)
-      int = io.read(4).unpack('N')[0]
-
-      log "Integer", :int => int
-
-      int
+    def integer_ext
+      read(4)
     end
 
     # | 1   | 2      | Length
@@ -180,13 +166,9 @@ module CouchRB
     # An atom is stored with a 2 byte unsigned length in big-endian order,
     # followed by Length numbers of 8 bit characters that forms the AtomName.
     # Note: The maximum allowed value for Length is 255.
-    def self.atom_ext(io)
-      length    = io.read(2).unpack('n')[0]
-      atom_name = io.read(length)
-
-      log "Atom", :length => length, :atom_name => atom_name
-
-      atom_name
+    def atom_ext
+      length = read(2)
+      io.read(length)
     end
 
     # | 1   | N    | 4  | 1
@@ -202,12 +184,10 @@ module CouchRB
     # In ID, only 18 bits are significant; the rest should be 0.
     # In Creation, only 2 bits are significant; the rest should be 0.
     # See NEW_REFERENCE_EXT.
-    def self.reference_ext(io)
-      node     = step(io)
-      id       = io.read(4).unpack('N')[0]
-      creation = io.read(1).unpack('H*')[0].to_i(16)
-
-      log "Reference (old)", :node => node, :id => id, :creation => creation
+    def reference_ext
+      node     = walking
+      id       = read(4)
+      creation = read(1)
 
       [node, id, creation]
     end
@@ -221,12 +201,10 @@ module CouchRB
     # The Creation works just like in reference_ext.
     #
     # This seems to be useless for us, only used in Erlang internals?
-    def self.port_ext(io)
-      node     = step(io)
-      id       = io.read(4).unpack('N')[0]
-      creation = io.read(1).unpack('H*')[0].to_i(16)
-
-      log "Port", :node => node, :id => id, :creation => creation
+    def port_ext
+      node     = walking
+      id       = read(4)
+      creation = read(1)
 
       [node, id, creation]
     end
@@ -238,13 +216,11 @@ module CouchRB
     # The ID and Creation fields works just like in REFERENCE_EXT, while the
     # Serial field is used to improve safety.
     # In ID, only 15 bits are significant; the rest should be 0.
-    def self.pid_ext(io)
-      node     = step(io)
-      id       = io.read(4).unpack('N')[0]
-      serial   = io.read(4).unpack('N')[0]
-      creation = io.read(1).unpack('H*')[0].to_i(16)
-
-      log "PID", :node => node, :id => id, :serial => serial, :creation => creation
+    def pid_ext
+      node     = walking
+      id       = read(4)
+      serial   = read(4)
+      creation = read(1)
 
       [node, id, serial, creation]
     end
@@ -255,13 +231,9 @@ module CouchRB
     # SMALL_TUPLE_EXT encodes a tuple.
     # The Arity field is an unsigned byte that determines how many element that
     # follows in the Elements section.
-    def self.small_tuple_ext(io)
-      arity = io.read(1).unpack('H*')[0].to_i(16)
-      tuple = Array.new(arity){ step(io) }
-
-      log "Tuple (small)", :arity => arity, :tuple => tuple
-
-      tuple
+    def small_tuple_ext
+      arity = read(1)
+      Array.new(arity){ walking }
     end
 
     # | 1   | 4     | N
@@ -269,13 +241,9 @@ module CouchRB
     #
     # Same as SMALL_TUPLE_EXT with the exception that Arity is an unsigned 4
     # byte integer in big endian format.
-    def self.large_tuple_ext(io)
-      arity = io.read(4).unpack('N')[0]
-      tuple = Array.new(arity){ step(io) }
-
-      log "Tuple (large)", :arity => arity, :tuple => tuple
-
-      tuple
+    def large_tuple_ext
+      arity = read(4)
+      Array.new(arity){ walking }
     end
 
     # | 1   | 2      | Length
@@ -287,11 +255,9 @@ module CouchRB
     # Since the Length field is an unsigned 2 byte integer (big endian),
     # implementations must make sure that lists longer than 65535 elements are
     # encoded as LIST_EXT.
-    def self.string_ext(io)
-      length = io.read(2).unpack('n')[0]
+    def string_ext
+      length = read(2)
       chars  = io.read(length)
-      log "String", :length => length, :chars => chars
-      chars
     end
 
     # | 1   | 4      | Â        | Â 
@@ -300,11 +266,9 @@ module CouchRB
     # Length is the number of elements that follows in the Elements section.
     # Tail is the final tail of the list; it is NIL_EXT for a proper list, but
     # may be anything type if the list is improper (for instance [a|b]).
-    def self.list_ext(io)
-      length = io.read(4).unpack('N')[0]
-      list   = Array.new(length){ step(io) }
-      log "List", :length => length, :list => list
-      list
+    def list_ext
+      length = read(4)
+      [Array.new(length){ walking }, walking]
     end
 
     # | 1   | 4      | Length
@@ -313,11 +277,9 @@ module CouchRB
     # Binaries are generated with bit syntax expression or with
     # list_to_binary/1, term_to_binary/1, or as input from binary ports.
     # The Length length field is an unsigned 4 byte integer (big endian).
-    def self.binary_ext(io)
-      length = io.read(4).unpack('N')[0]
+    def binary_ext
+      length = read(4)
       data   = io.read(length)
-      log "Binary", :length => length, :data => data
-      data
     end
 
     # | 1   | 1 | 1    | n
@@ -332,12 +294,10 @@ module CouchRB
     # (d0*B^0 + d1*B^1 + d2*B^2 + ... d(N-1)*B^(n-1))
     #
     # FIXME: Whatever this is supposed to mean
-    def self.small_big_ext(io)
-      n    = io.read(1).unpack('H*')[0].to_i(16)
-      sign = io.read(1)
-      d    = io.read(n)
-      log "Big (small)", :n => n, :sign => sign, :d => d
-      d
+    def small_big_ext
+      n    = read(1)
+      sign = read(1)
+      data = io.read(n).unpack('H*')[0].to_i(16)
     end
 
     # | 1   | 4 | 1    | n
@@ -345,12 +305,10 @@ module CouchRB
     #
     # Same as SMALL_BIG_EXT with the difference that the length field is an
     # unsigned 4 byte integer.
-    def self.large_big_ext(io)
-      n    = io.read(4).unpack('N')[0]
-      sign = io.read(1)
-      d    = io.read(n)
-      log "Big (small)", :n => n, :sign => sign, :d => d
-      d
+    def large_big_ext
+      n    = read(4)
+      sign = read(1)
+      data = io.read(n)
     end
 
     # | 1   | 4    | 1     | 16   | 4     | 4       | N1     | N2       | N3      | N4  | N5
@@ -370,7 +328,7 @@ module CouchRB
     #   Stored in big-endian byte order.
     # NumFree
     #   Number of free variables.
-    # Module  
+    # Module
     #   Encoded as an atom, using ATOM_EXT, NEW_CACHE or CACHED_ATOM.
     #   This is the module that the fun is implemented in.
     # OldIndex
@@ -385,12 +343,17 @@ module CouchRB
     #   It represents the process in which the fun was created.
     # Free vars
     #   NumFree number of terms, each one encoded according to its type.
-    def self.new_fun_ext(io)
-      size     = io.read(4).unpack('N')[0]
-      arity    = io.read(1).unpack('H*')[0].to_i(16)
-      uniq     = io.read(16).unpack('H*')[0]
-      index    = io.read(4).unpack('N')[0]
-      num_free = io.read(4).unpack('N')[0]
+    def new_fun_ext
+      size     = read(4)
+      arity    = read(1).unpack('H*')[0].to_i(16)
+      uniq     = read(16)
+      index    = read(4)
+      num_free = read(4)
+
+      log("Fun (new)", :size => size, :arity => arity, :uniq => uniq,
+          :index => index, :num_free => num_free)
+
+      [size, arity, uniq, index, num_free]
     end
 
     # | 1   | N1     | N2       | N3
@@ -399,7 +362,28 @@ module CouchRB
     # This term is the encoding for external funs: fun M:F/A.
     # Module and Function are atoms (encoded using ATOM_EXT, NEW_CACHE or
     # CACHED_ATOM). Arity is an integer encoded using SMALL_INTEGER_EXT.
-    def self.export_ext(io)
+    def export_ext
+      mod = walking
+      function = walking
+      arity = walking
+
+      [mod, function, arity]
+    end
+
+    # | 1   | 2      | N    | 1        | N'
+    # | 114 | Length | Node | Creation | ID ...
+    #
+    # Node and Creation are as in REFERENCE_EXT.
+    # ID contains a sequence of big-endian unsigned integers (4 bytes each, so
+    # N' is a multiple of 4), but should be regarded as uninterpreted data.
+    # N' = 4 * Length.
+    # In the first word (four bytes) of ID, only 18 bits are significant, the
+    # rest should be 0.
+    # In Creation, only 2 bits are significant, the rest should be 0.
+    # NEW_REFERENCE_EXT was introduced with distribution version 4.
+    # In version 4, N' should be at most 12.
+    def new_reference_ext
+      length = read(2)
     end
 
     # |  1 | 31
@@ -412,10 +396,8 @@ module CouchRB
     #
     # This term is used in minor version 0 of the external format; it has been
     # superseded by NEW_FLOAT_EXT .
-    def self.float_ext(io)
+    def float_ext
       float = io.read(31)
-      log "Float (old)", :float => float
-      float
     end
 
     # The overall format of the term format is:
@@ -425,19 +407,27 @@ module CouchRB
     # A compressed term looks like this:
     # | 1   | 1  | 4                | N
     # | 131 | 80 | UncompressedSize | Zlib-compressedData
-    def self.term(io)
-      tag = io.read(1).unpack('H')[0].to_i(16)
-
-      log "Term", :tag => tag
-
-      tag
+    def term
+      read(1)
     end
 
-    def self.method_missing(*args)
-      p args
+    def read(n)
+      chunk = io.read(n)
+
+      case n
+      when 1 ; chunk.unpack('H*')[0].to_i(16)
+      when 2 ; chunk.unpack('n')[0]
+      when 4 ; chunk.unpack('N')[0]
+      when 8 ; chunk.unpack('g')[0]
+      when 16; chunk.unpack('H*')[0]
+      when nil
+        raise("Tried reading %p bytes, but IO is empty" % [n])
+      else
+        chunk
+      end
     end
 
-    def self.log(msg, hash)
+    def log(msg, hash)
       puts("%-20s: %p" % [msg, hash])
     end
   end
