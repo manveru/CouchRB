@@ -48,6 +48,7 @@ module CouchRB
       103 => :pid_ext,
       104 => :small_tuple_ext,
       105 => :large_tuple_ext,
+      106 => :nil_ext,
       107 => :string_ext,
       108 => :list_ext,
       109 => :binary_ext,
@@ -144,12 +145,12 @@ module CouchRB
       [index, atom_name]
     end
 
-    # |  1 | 4
+    # |  1 | 1
     # | 98 | Int
     #
     # Signed 32 bit integer in big-endian format (i.e. MSB first)
     def small_integer_ext
-      read(4)
+      read(1)
     end
 
     # | 1  | 4
@@ -234,6 +235,10 @@ module CouchRB
     def small_tuple_ext
       arity = read(1)
       Array.new(arity){ walking }
+    end
+
+    def nil_ext
+      []
     end
 
     # | 1   | 4     | N
