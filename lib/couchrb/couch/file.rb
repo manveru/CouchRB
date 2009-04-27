@@ -1,7 +1,26 @@
 require 'digest/md5'
-require 'couchrb/erlang_term'
+require 'couchrb/couch/io'
+require 'couchrb/couch/term'
+require 'couchrb/couch/header'
 
 module CouchRB
+  class CouchFile < CouchIO
+    def write_header(header)
+      write_binary(0, header)
+    end
+
+    def read_header
+      open do |io|
+        return CouchHeader.parse(io)
+      end
+    end
+  end
+end
+
+__END__
+
+=begin
+
   # Attempts to read (and eventually write) the CouchDB files directly.
   #
   # The format of CouchDB files consists of two headers for redundancy.
@@ -9,9 +28,6 @@ module CouchRB
   #
   # All valuable information is stored as Erlang Terms except for the header
   # prefix and checksums.
-  #
-  # My biggest problem right now is that I have no idea how the serialization
-  # of Erlang Terms should work.
   class CouchFile
     attr_reader :header1, :header2
 
@@ -64,6 +80,9 @@ module CouchRB
     def parse_header(io)
       Header.parse(io)
     end
+    end
+    end
+=end
 
     # A header consists of prefix, body, and a MD5 checksum.
     #
@@ -98,54 +117,3 @@ module CouchRB
     #   revs_limit
     #
     # I'll need to check Erlang source to decode that information.
-    class Header
-      SIZE = 2048
-      PREFIX = "gmk\0"
-      PREFIX_SIZE = PREFIX.bytesize
-      MD5_SIZE = 16
-      BODY_SIZE = SIZE - PREFIX_SIZE - MD5_SIZE
-
-      def self.parse(io)
-        instance = new(io)
-        instance.parse
-        instance
-      end
-
-      attr_reader :prefix, :body, :md5
-
-      def initialize(io)
-        @io = io
-      end
-
-      def parse
-        parse_prefix
-        parse_body
-        parse_md5
-      end
-
-      def parse_prefix
-        @prefix = @io.read(PREFIX_SIZE).unpack('a*')[0]
-        raise "Invalid header prefix" unless @prefix == PREFIX
-      end
-
-      def parse_body
-        @body = @io.read(BODY_SIZE)
-        @terms = ErlangTerm.parse(StringIO.new(@body))
-      end
-
-      def parse_md5
-        @md5 = @io.read(MD5_SIZE).unpack('H*')[0]
-        @real_md5 = Digest::MD5.hexdigest(@body)
-        raise "Invalid checksum" unless ok?
-      end
-
-      def ok?
-        @real_md5 == @md5
-      end
-
-      def ==(header)
-        @md5 == header.md5
-      end
-    end
-  end
-end

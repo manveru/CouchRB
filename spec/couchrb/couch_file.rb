@@ -7,9 +7,9 @@ describe CouchRB::CouchFile do
   medium = File.join(fixture, 'medium.couch')
 
   it 'should parse headers of a file' do
-#     db = CouchRB::CouchFile.new(empty)
-#     db.parse
-#
+    db = CouchRB::CouchFile.new(empty)
+    db.read_header
+
 #     db.header1.should.be.ok
 #     db.header1.md5.should == "2309e1153e6794f26f9a6504f4a2d1f9"
 #
@@ -17,15 +17,19 @@ describe CouchRB::CouchFile do
 #     db.header2.md5.should == db.header1.md5
   end
 
-  it 'should parse more!' do
-    db = CouchRB::CouchFile.new(tiny)
-    puts
-    db.parse
-  end
+#   it 'should parse more!' do
+#     db = CouchRB::CouchFile.new(tiny)
+#     puts
+#     db.parse do |exp|
+#       p exp
+#     end
+#   end
 
-  it 'should parse even more!' do
+#   it 'should parse even more!' do
 #     db = CouchRB::CouchFile.new(medium)
 #     puts
-#     db.parse
-  end
+#     db.parse do |term|
+#       p term
+#     end
+#   end
 end
