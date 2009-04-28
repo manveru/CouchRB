@@ -6,30 +6,34 @@ describe CouchRB::CouchFile do
   tiny  = File.join(fixture, 'tiny.couch')
   medium = File.join(fixture, 'medium.couch')
 
-  it 'should parse headers of a file' do
-    db = CouchRB::CouchFile.new(empty)
-    db.read_header
+  describe 'parsing headers' do
+    it 'parses headers of an empty db' do
+      file = CouchRB::CouchFile.new(empty)
+      file.parse
+      file.header.should.be.ok
+      file.header.md5.should == "2309e1153e6794f26f9a6504f4a2d1f9"
+    end
 
-#     db.header1.should.be.ok
-#     db.header1.md5.should == "2309e1153e6794f26f9a6504f4a2d1f9"
-#
-#     db.header2.should.be.ok
-#     db.header2.md5.should == db.header1.md5
+    it 'parses headers of a tiny db' do
+      file = CouchRB::CouchFile.new(tiny)
+      file.parse
+      file.header.should.be.ok
+      file.header.md5.should == "8d7e70dd9959f3fe8fbbc33ddb021f40"
+    end
+
+    it 'parses headers of a medium db' do
+      file = CouchRB::CouchFile.new(medium)
+      file.parse
+      file.header.should.be.ok
+      file.header.md5.should == "c8fd19c870a8dc24ce5ca1d26342dbd0"
+    end
   end
 
-#   it 'should parse more!' do
-#     db = CouchRB::CouchFile.new(tiny)
-#     puts
-#     db.parse do |exp|
-#       p exp
-#     end
-#   end
-
-#   it 'should parse even more!' do
-#     db = CouchRB::CouchFile.new(medium)
-#     puts
-#     db.parse do |term|
-#       p term
-#     end
-#   end
+  describe 'parsing documents' do
+    it 'parses documents of a tiny db' do
+      file = CouchRB::CouchFile.new(medium)
+      file.parse
+      file.docs.should == []
+    end
+  end
 end

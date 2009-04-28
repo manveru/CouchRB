@@ -5,13 +5,51 @@ require 'couchrb/couch/header'
 
 module CouchRB
   class CouchFile < CouchIO
-    def write_header(header)
-      write_binary(0, header)
+    attr_reader :header, :docs
+
+    def parse
+      open do |io|
+        read_headers(io)
+        read_docs(io)
+      end
     end
 
-    def read_header
-      open do |io|
-        return CouchHeader.parse(io)
+    private
+
+    def write_header(header)
+      # write_binary(0, header)
+    end
+
+    def read_headers(io)
+      header1 = CouchHeader.parse(io)
+      header2 = CouchHeader.parse(io)
+
+      if header1.ok?
+        if header2.ok?
+          return @header = header1
+        else
+          return @header = header1
+        end
+      elsif header2.ok?
+        return @header = header2
+      else
+        raise "Headers corrupt"
+      end
+    end
+
+    def read_docs(io)
+      ErlangTerm.new(io).each do |term|
+        p term
+      end
+    end
+
+    class CouchDocument
+      def self.parse(io)
+        new(ErlangTerm.new(io).next)
+      end
+
+      def initialize(*args)
+        @args = args
       end
     end
   end

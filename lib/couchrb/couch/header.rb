@@ -64,7 +64,7 @@ module CouchRB
     end
 
     def parse_body(io)
-      @body = Body.parse(io)
+      @body = Body.parse(io.read(BODY_SIZE))
     end
 
     def parse_md5(io)
@@ -94,32 +94,18 @@ module CouchRB
     #
     # Parsing it almost drove me insane, but it is done!
     class Body
-      def self.parse(io)
-        terms = ErlangTerm.new(io)
-
-        all = [
-          term_name                     = terms.next,
-          disk_version                  = terms.next,
-          update_seq                    = terms.next,
-          summary_stream_state          = terms.next,
-          fulldocinfo_by_id_btree_state = terms.next,
-          docinfo_by_seq_btree_state    = terms.next,
-          local_docs_btree_state        = terms.next,
-          purge_seq                     = terms.next,
-          purged_docs                   = terms.next,
-          admins_ptr                    = terms.next,
-          revs_limit                    = terms.next,
-        ]
-
-        new(*all)
+      def self.parse(string)
+        term = ErlangTerm.new(StringIO.new(string)).next
+        new(string, term)
       end
 
-      def initialize(*terms)
-        @terms = terms
+      def initialize(source, term)
+        @source = source
+        @term = term
       end
 
       def checksum
-        Digest::MD5.hexdigest('123')
+        Digest::MD5.hexdigest(@source)
       end
     end
   end
