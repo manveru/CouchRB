@@ -220,9 +220,8 @@ module CouchRB
     # last byte in the data field, counting from the most
     # significant bit towards the least significant.
     def bit_binary_ext
-      length = read(4, 'N')
-      bits   = read(1)
-      data   = io.read(length)
+      length, bits = io.read(5).unpack('NC')
+      data = io.read(length)
     end
 
     # | 1  | 1     | 2      | Length
@@ -234,8 +233,7 @@ module CouchRB
     # The atom cache is currently only used between real Erlang
     # nodes (not between Erlang nodes and C or Java nodes).
     def new_cache_ext
-      index     = read(1)
-      length    = read(2, 'n')
+      index, length = io.read(3).unpack('Cn')
       atom_name = io.read(length)
 
       [index, atom_name]
@@ -291,9 +289,8 @@ module CouchRB
     # only 2 bits are significant; the rest should be 0.
     # See NEW_REFERENCE_EXT.
     def reference_ext
-      node     = walking
-      id       = read(4, 'N')
-      creation = read(1)
+      node = walking
+      id, creation = io.read(5).unpack('NC')
 
       Reference.new(node, id, creation)
     end
@@ -309,9 +306,8 @@ module CouchRB
     # This seems to be useless for us, only used in Erlang
     # internals?
     def port_ext
-      node     = walking
-      id       = read(4, 'N')
-      creation = read(1)
+      node = walking
+      id, creation = io.read(5).unpack('NC')
 
       [node, id, creation]
     end
@@ -319,19 +315,13 @@ module CouchRB
     # | 1   | N    | 4  | 4      | 1
     # | 103 | Node | ID | Serial | Creation
     #
-    # Encode a process identifier object (obtained from spawn/3
-    # or friends).
-    # The ID and Creation fields works just like in
-    # REFERENCE_EXT, while the Serial field is used to improve
-    # safety.
-    # In ID, only 15 bits are significant; the rest should be
-    # 0.
+    # Encode a process identifier object (obtained from spawn/3 or friends).
+    # The ID and Creation fields works just like in REFERENCE_EXT, while the
+    # Serial field is used to improve safety.
+    # In ID, only 15 bits are significant; the rest should be 0.
     def pid_ext
-      node     = walking
-      id       = read(4, 'N')
-      serial   = read(4, 'N')
-      creation = read(1)
-
+      node = walking
+      id, serial, creation = io.read(9).unpack('NNC')
       PID.new(node, id, serial, creation)
     end
 
@@ -348,7 +338,7 @@ module CouchRB
     end
 
     def nil_ext
-      nil
+      :nil
     end
 
     # | 1   | 4     | N
@@ -356,9 +346,16 @@ module CouchRB
     #
     # Same as SMALL_TUPLE_EXT with the exception that Arity is
     # an unsigned 4 byte integer in big endian format.
+    #
+    # Please note that in Ruby, Array.new argument is restricted to the size of
+    # 'long'
     def large_tuple_ext
       arity = read(4, 'N')
-      elements = Array.new(arity){ walking }
+      elements = []
+      arity.times{
+        break if io.eof?
+        elements << walking
+      }
       Tuple.new(elements)
     end
 
@@ -396,10 +393,8 @@ module CouchRB
     # | 109 | Length | Data
     #
     # Binaries are generated with bit syntax expression or with
-    # list_to_binary/1, term_to_binary/1, or as input from
-    # binary ports.
-    # The Length length field is an unsigned 4 byte integer
-    # (big endian).
+    # list_to_binary/1, term_to_binary/1, or as input from binary ports.
+    # The Length length field is an unsigned 4 byte integer (big endian).
     def binary_ext
       length = read(4, 'N')
       data   = io.read(length)
@@ -419,9 +414,8 @@ module CouchRB
     #
     # FIXME: Whatever this is supposed to mean
     def small_big_ext
-      length = read(1)
-      sign   = read(1)
-      data   = io.read(length).unpack('h*')[0].to_i(16)
+      length, sign = io.read(2).unpack('CC')
+      data = io.read(length).unpack('h*')[0].to_i(16)
       sign == 0 ? data : -data
     end
 
@@ -431,9 +425,8 @@ module CouchRB
     # Same as SMALL_BIG_EXT with the difference that the length
     # field is an unsigned 4 byte integer.
     def large_big_ext
-      length = read(4, 'N')
-      sign   = read(1)
-      data   = io.read(length).unpack('h*')[0].to_i(16)
+      length, sign = io.read(5).unpack('NC')
+      data = io.read(length).unpack('h*')[0].to_i(16)
       sign == 0 ? data : -data
     end
 
@@ -544,22 +537,45 @@ module CouchRB
       puts("%-20s: %p" % [msg, hash])
     end
 
+    module PrettyTerm
+      def inspect
+        old = super
+        full_name = self.class.name
+        name = full_name.split('::').last
+        old.sub("struct #{full_name}", name)
+      end
+    end
+
     # Classes to hold Erlang structures so we don't lose them
 
-    class Atom         < Struct.new(:value); end
-    class Export       < Struct.new(:module, :function, :arity); end
-    class NewFunction  < Struct.new(:binary); end
-    class NewReference < Struct.new(:length, :node, :creation, :n_prime); end
-    class PID          < Struct.new(:node, :id, :serial, :creation); end
-    class Reference    < Struct.new(:node, :id, :creation); end
+    class Atom         < Struct.new(:value)
+      include PrettyTerm
+    end
+    class Export       < Struct.new(:module, :function, :arity)
+      include PrettyTerm
+    end
+    class NewFunction  < Struct.new(:binary)
+      include PrettyTerm
+    end
+    class NewReference < Struct.new(:length, :node, :creation, :n_prime)
+      include PrettyTerm
+    end
+    class PID          < Struct.new(:node, :id, :serial, :creation)
+      include PrettyTerm
+    end
+    class Reference    < Struct.new(:node, :id, :creation)
+      include PrettyTerm
+    end
 
     class Tuple < Struct.new(:elements);
       include Enumerable
       def each(&block) elements.each(&block) end
+      def inspect; elements.inspect; end
     end
     class List < Struct.new(:elements)
-      include Enumerable
+      include Enumerable, PrettyTerm
       def each(&block) elements.each(&block) end
+      def inspect; elements.inspect; end
     end
   end
 end
