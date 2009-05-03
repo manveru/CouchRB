@@ -50,7 +50,7 @@ module CouchRB
         body = process_path(method, path, hash)
       end
 
-      response.body = body.to_json if body
+      response.body = [body.to_json] if body
       response.finish
     end
 

@@ -49,7 +49,7 @@ module CouchRB
       response.status = 405
     end
 
-    response.body = body.to_json
+    response.body = [body.to_json]
     response.finish
   end
 
