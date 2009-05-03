@@ -57,11 +57,11 @@ module CouchRB
 
       if //.respond_to?(:kcode) # 1.8
         def open(mode = 'r', &block)
-          File.open(@path, mode, &block)
+          ::File.open(@path, mode, &block)
         end
       else # 1.9
         def open(mode = 'r', &block)
-          File.open(@path, "#{mode}:ASCII-8BIT", &block)
+          ::File.open(@path, "#{mode}:ASCII-8BIT", &block)
         end
       end
     end

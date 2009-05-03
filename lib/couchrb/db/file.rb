@@ -22,8 +22,8 @@ module CouchRB
       end
 
       def read_headers(io)
-        header1 = CouchHeader.parse(io)
-        header2 = CouchHeader.parse(io)
+        header1 = Header.parse(io)
+        header2 = Header.parse(io)
 
         if header1.ok?
           if header2.ok?
