@@ -120,30 +120,18 @@ module CouchRB
 
         attr_reader :checksum, :term
 
+        # accessing the term
+        attr_reader :disc_version, :update_seq, :summary_stream_state,
+          :fulldocinfo_by_id_btree_state, :docinfo_by_seq_btree_state,
+          :local_docs_btree_state, :purge_seq
+
         def initialize(source, term)
           @term = term
           @checksum = Digest::MD5.hexdigest(source)
-        end
 
-        def disc_version
-        end
-
-        def update_seq
-        end
-
-        def summary_tree_state
-        end
-
-        def fulldocinfo_by_id_btree_state
-        end
-
-        def docinfo_by_seq_btree_state
-        end
-
-        def local_docs_btree_state
-        end
-
-        def purge_seq
+          _atom, @disc_version, @update_seq, @summary_stream_state,
+            @fulldocinfo_by_id_btree_state, @docinfo_by_seq_btree_state,
+            @local_docs_btree_state, @purge_seq = @term.elements
         end
 
         def to_binary

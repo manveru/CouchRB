@@ -569,14 +569,34 @@ module CouchRB
       end
 
       class Tuple < Struct.new(:elements);
-        include Enumerable
+        include Comparable, Enumerable
+
         def each(&block) elements.each(&block) end
+
         def inspect; elements.inspect; end
+
+        def <=>(other)
+          if other.respond_to?(:elements)
+            elements <=> other.elements
+          else
+            elements <=> other
+          end
+        end
       end
       class List < Struct.new(:elements)
-        include Enumerable, PrettyTerm
+        include Comparable, Enumerable, PrettyTerm
+
         def each(&block) elements.each(&block) end
+
         def inspect; elements.inspect; end
+
+        def <=>(other)
+          if other.respond_to?(:elements)
+            elements <=> other.elements
+          else
+            elements <=> other
+          end
+        end
       end
     end
   end
