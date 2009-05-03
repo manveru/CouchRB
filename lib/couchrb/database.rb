@@ -153,7 +153,8 @@ module CouchRB
       query = Document::Max.new(id, '0')
 
       if found = @docs.find_latest(query)
-        found.value
+        doc = found.value
+        doc.to_hash.merge(doc._version_hash)
       else
         response.status = 404
         {"error" => "not_found", "reason" => "missing"}

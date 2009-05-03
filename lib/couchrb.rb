@@ -7,7 +7,7 @@ $LOAD_PATH.unshift(File.expand_path('../', __FILE__))
 
 require 'couchrb/red_black_tree'
 require 'couchrb/binary_tree'
-require 'couchrb/couch/file'
+require 'couchrb/db/file'
 require 'couchrb/document'
 require 'couchrb/view_context'
 require 'couchrb/database'
@@ -16,7 +16,7 @@ module CouchRB
   extend Innate::Trinity
 
   def self.call(env)
-    path = (env['PATH_INFO'] || '').sub(/^\//, '')
+    path = (env['PATH_INFO'] || '').gsub(/(^\/|\/$)/, '')
 
     case env['REQUEST_METHOD']
     when 'GET'

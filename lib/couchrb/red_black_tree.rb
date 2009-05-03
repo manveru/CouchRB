@@ -34,11 +34,30 @@ module CouchRB
     # Walk into the tree until we cannot find higher revisions, then return
     # The tricky part is to have a revision that is higher than any other, but
     # that's handled by the value, we only care about the id.
+    # If the current document is deleted and a child node differs only in the
+    # revision, we consider the child as deleted as well, that allows us to
+    # delete an entire history of documents by marking only the parent as
+    # deleted.
     def find_latest(key)
-      return self if key == value unless deleted
-      return left.find_latest(key) if left and key < value
-      return right.find_latest(key) if right
-      return self if key.id == value.id unless deleted
+      if deleted
+        if left
+          if key < value
+            unless left.value.id == value.id
+              return left.find_latest(key)
+            end
+          end
+        end
+        if right
+          unless right.value.id == value.id
+            return right.find_latest(key)
+          end
+        end
+      else
+        return self if key == value
+        return left.find_latest(key) if left and key < value
+        return right.find_latest(key) if right
+        return self if key.id == value.id
+      end
     end
 
     def find_value(key)
@@ -47,9 +66,14 @@ module CouchRB
     end
 
     def each(&block)
-      left.each(&block) if left
-      yield self unless deleted
-      right.each(&block) if right
+      if deleted
+        left.each(&block) if left and left.value.id != value.id
+        right.each(&block) if right and right.value.id != value.id
+      else
+        left.each(&block) if left
+        yield self
+        right.each(&block) if right
+      end
     end
 
     def <=>(other)

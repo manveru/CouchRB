@@ -7,37 +7,6 @@ shared :couch_client do
   end
 
   Innate.options.mode = :couchrb
-
-  behaves_like :mock
-
-  def json_body
-    JSON.parse(last_response.body)
-  end
-
-  def put_doc(url, doc)
-    json = doc.to_json
-
-    header 'CONTENT_LENGTH', json.bytesize
-    header 'CONTENT_TYPE', 'application/json'
-    header :input, json
-    put(url)
-  end
-
-  def post_doc(url, doc)
-    json = doc.to_json
-
-    header 'CONTENT_LENGTH', json.bytesize
-    header 'CONTENT_TYPE', 'application/json'
-    header :input, json
-    post(url)
-  end
-
-  def query(url, hash = {})
-    doc = {'language' => 'ruby'}
-    doc['map'] = hash[:map] if hash[:map]
-    doc['reduce'] = hash[:reduce] if hash[:reduce]
-    post_doc(url, doc)
-  end
 end
 
 class DB
@@ -58,14 +27,47 @@ class DB
     put(url)
   end
 
+  def info
+    get(url)
+    json_body
+  end
+
+  def query(doc = {})
+    doc['language'] ||= 'ruby'
+    json = doc.to_json
+
+    header 'CONTENT_LENGTH', json.bytesize
+    header 'CONTENT_TYPE', 'application/json'
+    header :input, json
+    post(url('_temp_view'))
+
+    json_body
+  end
+
   def save(doc)
-    id = doc['_id'] ||= CouchRB.uuid
+    id = doc[:_id] || (doc['_id'] ||= CouchRB.uuid)
     json = doc.to_json
 
     header 'CONTENT_LENGTH', json.bytesize
     header 'CONTENT_TYPE', 'application/json'
     header :input, json
     put(url(id))
+
+    doc['_rev'] = json_body['rev']
+
+    last_response
+  end
+
+  def delete_doc(doc)
+    delete(url(doc['_id']), :rev => doc['_rev'])
+
+    json_body
+  end
+
+  def open(id, options = {})
+    get(url(id.to_s), options)
+
+    json_body unless last_response.status == 404
   end
 
   def all_docs(options = {})
@@ -96,14 +98,14 @@ class DB
     last_response.status.should == 200
   end
 
+  def json_body
+    JSON.parse(last_response.body)
+  end
+
   private
 
   def url(*suffix)
     ::File.join('/', name, *suffix)
-  end
-
-  def json_body
-    JSON.parse(last_response.body)
   end
 
   def request_input(method, url, input, options = {})
@@ -112,5 +114,41 @@ class DB
     header 'CONTENT_TYPE', 'application/json'
     header :input, json
     __send__(method, url, options)
+  end
+end
+
+__END__
+
+  Innate.options.mode = :couchrb
+
+  behaves_like :mock
+
+  def json_body
+    JSON.parse(last_response.body)
+  end
+
+  def put_doc(url, doc)
+    json = doc.to_json
+
+    header 'CONTENT_LENGTH', json.bytesize
+    header 'CONTENT_TYPE', 'application/json'
+    header :input, json
+    put(url)
+  end
+
+  def post_doc(url, doc)
+    json = doc.to_json
+
+    header 'CONTENT_LENGTH', json.bytesize
+    header 'CONTENT_TYPE', 'application/json'
+    header :input, json
+    post(url)
+  end
+
+  def query(url, hash = {})
+    doc = {'language' => 'ruby'}
+    doc['map'] = hash[:map] if hash[:map]
+    doc['reduce'] = hash[:reduce] if hash[:reduce]
+    post_doc(url, doc)
   end
 end

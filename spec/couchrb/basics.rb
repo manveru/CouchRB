@@ -1,167 +1,154 @@
 require 'spec/helper'
 
 describe 'basics' do
-  behaves_like :couch_client
+  behaves_like :mock, :couch_client
 
   it 'shows version on /' do
     get('/').status.should == 200
-    json_body['couchdb'].should == 'Welcome'
+    JSON.parse(last_response.body).
+      should == { 'couchdb' => 'Welcome', 'version' => '0.9.0'}
   end
 
   it 'creates and deletes a db' do
-    put('/test_suite_db').status.should == 200
-    json_body['ok'].should == true
+    @db = DB.new('/test_suite_db')
+    @db.create_db.status.should == 200
+    @db.json_body['ok'].should == true
 
-    delete('/test_suite_db').status.should == 200
-    json_body['ok'].should == true
+    @db.delete_db.status.should == 200
+    @db.json_body['ok'].should == true
   end
 
   should "tell us if we try to delete a db that doesn't exist" do
-    delete('/test_couch_db').status.should == 404
-    json_body.should == {'error' => 'not_found', 'reason' => 'Missing'}
+    @db.delete_db.status.should == 404
+    @db.json_body.should == {'error' => 'not_found', 'reason' => 'Missing'}
   end
 
   it 'returns 412 when trying to PUT existing DB' do
-    put('/test_suite_db').status.should == 200
-    json_body['ok'].should == true
+    @db.create_db.status.should == 200
+    @db.json_body['ok'].should == true
 
-    put('/test_suite_db').status.should == 412
-    json_body.should == {
+    @db.create_db.status.should == 412
+    @db.json_body.should == {
       'error' => 'file_exists',
       'reason' => 'The database could not be created, the file already exists.'
     }
   end
 
   should 'get the database info, check the db_name' do
-    get('/test_suite_db')
-    json_body['db_name'].should == 'test_suite_db'
+    @db.info['db_name'].should == 'test_suite_db'
   end
 
   should 'create a document and save it to the database' do
-    put_doc('/test_suite_db/0', 'a' => 1, 'b' => 1)
-    last_response.status.should == 200
+    @doc_1 = {'_id' => '0', 'a' => 1, 'b' => 1}
 
-    body = json_body
-    body['ok'].should == true
-    body['id'].should == '0'
-    body['rev'].should.not.be.nil
+    @db.save(@doc_1).status.should == 200
+
+    doc = @db.json_body
+    doc['ok'].should == true
+    doc['id'].should.not.be.nil
+    doc['rev'].should.not.be.nil
+
+    @doc_1['_id'].should == doc['id']
+    @doc_1['_rev'].should == doc['rev']
   end
 
   should 'make sure the revs_info status is good' do
-    get('/test_suite_db/1', :revs_info => true).status.should == 200
-    json_body['_revs_info'].first['status'].should == 'available'
+    @db.open(@doc_1['_id'], :revs_info => true)
+    @db.json_body['_revs_info'].first['status'].should == 'available'
   end
 
   should 'create some more documents' do
-    put_doc('/test_suite_db/1', '_id' => '1', 'a' => 2, 'b' => 4)
-    json_body['ok'].should == true
-    put_doc('/test_suite_db/2', '_id' => '2', 'a' => 3, 'b' => 9)
-    json_body['ok'].should == true
-    put_doc('/test_suite_db/3', '_id' => '3', 'a' => 4, 'b' => 16)
-    json_body['ok'].should == true
+    @db.save('_id' => '1', 'a' => 2, 'b' => 4)
+    @db.json_body['ok'].should == true
+
+    @db.save('_id' => '2', 'a' => 3, 'b' => 9)
+    @db.json_body['ok'].should == true
+
+    @db.save('_id' => '3', 'a' => 4, 'b' => 16)
+    @db.json_body['ok'].should == true
   end
 
   should 'have correct count of docs' do
-    get('/test_suite_db')
-    json_body['doc_count'].should == 4
+    @db.info['doc_count'].should == 4
   end
 
   should 'process a simple map function' do
     @map = 'lambda{|doc| emit(nil, doc["b"]) if doc["a"] == 4 }'
 
-    query('/test_suite_db/_temp_view', :map => @map)
-    body = json_body
-    body['total_rows'].should == 1
-    body['rows'].first['value'].should == 16
+    results = @db.query(:map => @map)
+    results['total_rows'].should == 1
+    results['rows'].first['value'].should == 16
   end
 
-  should 'reopen document we saved earlier' do
-    get('/test_suite_db/0').status.should == 200
-    json_body['a'].should == 1
-  end
+  should 'reopen, modify, and save a document' do
+    doc = @db.open(@doc_1['_id'])
 
-  should 'modify and save a document' do
-    get('/test_suite_db/0').status.should == 200
-    body = json_body
-    body['a'] = 4
-    put_doc('/test_suite_db/0', body).status.should == 200
-    json_body['ok'].should == true
-    json_body['rev'].should.not == body['_rev']
+    doc['a'].should == 1
+    doc['a'] = 4
 
-    get('/test_suite_db/0')
-    @first_doc = json_body # keep it around for later reference
-    @first_doc['a'].should == 4
+    @db.save(doc)
   end
 
   should 'still have correct count of docs' do
-    get('/test_suite_db')
-    json_body['doc_count'].should == 4
+    @db.info['doc_count'].should == 4
   end
 
   should 'show the modified doc in the new map results' do
-    query('/test_suite_db/_temp_view', :map => @map)
-    body = json_body
-    body['total_rows'].should == 2
+    @db.query(:map => @map)['total_rows'].should == 2
   end
 
   should 'write 2 more documents' do
-    put_doc('/test_suite_db/4', 'a' => 3, 'b' => 9)
-    put_doc('/test_suite_db/5', 'a' => 4, 'b' => 16)
+    @db.save('_id' => '4', 'a' => 3, 'b' => 9)
+    @db.save('_id' => '5', 'a' => 4, 'b' => 16)
 
     # 1 more document should now be in the result.
-    query('/test_suite_db/_temp_view', :map => @map)
-    body = json_body
-    body['total_rows'].should == 3
+    @db.query(:map => @map)['total_rows'].should == 3
 
-    get('/test_suite_db')
-    json_body['doc_count'].should == 6
+    @db.info['doc_count'].should == 6
   end
 
   it 'processes a map/reduce query' do
     @reduce = 'lambda{|keys, values| sum(values) }'
 
-    query('/test_suite_db/_temp_view', :map => @map, :reduce => @reduce)
-    body = json_body
-    body['rows'].first['value'].should == 33
+    results = @db.query(:map => @map, :reduce => @reduce)
+    results['rows'].first['value'].should == 33
   end
 
   it 'deletes a document' do
-    @id = @first_doc['_id']
-    @rev = @first_doc['_rev']
-    delete("/test_suite_db/#@id", :rev => @rev)
-    json_body['ok'].should == true
+    @db.delete_doc(@doc_1)['ok'].should == true
   end
 
   it 'makes sure we cannot open the document' do
-    get("/test_suite_db/#@id")
-    json_body['_id'].should == nil
+    @db.open(@doc_1['_id']).should == nil
   end
 
   it 'shows 1 less document in the results' do
-    query('/test_suite_db/_temp_view', :map => @map)
-    json_body['total_rows'].should == 2
+    @db.query(:map => @map)['total_rows'].should == 2
   end
 
   it 'counts one less document in the db' do
-    get('/test_suite_db')
-    json_body['doc_count'].should == 5
+    @db.info['doc_count'].should == 5
   end
 
   should 'still be able open the old rev of the deleted doc' do
-    get("/test_suite_db/#@id", :rev => @rev).status.should == 200
+    @db.open(@doc_1['_id'], :rev => @doc_1['_rev'])
+    @db.last_response.status.should == 200
   end
 
   it 'should set a Location header on POST' do
-    put_doc('/test_suite_db', 'foo' => 'bar').status.should == 200
-    body = json_body
-    location = last_response['Location']
+    @db.save('foo' => 'bar')
+    doc = @db.json_body
+
+    location = @db.last_response['Location']
     location.should.not.be.nil?
+
     atoms = location.split('/')
     atoms[1].should == 'test_suite_db'
-    atoms[2].should == body['id']
+    atoms[2].should == doc['id']
   end
 
   should 'return 404 when deleting a non-existent document' do
-    delete('/test_suite_db/doc-does-not-exist').status.should == 404
+    @db.delete_doc('_id' => 'doc-does-not-exist')
+    @db.last_response.status.should == 404
   end
 end
