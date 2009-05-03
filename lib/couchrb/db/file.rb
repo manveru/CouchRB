@@ -40,7 +40,7 @@ module CouchRB
 
       def read_docs(io)
         Term.new(io).each do |term|
-          p term
+          # p term
         end
       end
 
