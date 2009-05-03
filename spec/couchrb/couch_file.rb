@@ -2,9 +2,9 @@ require 'spec/helper'
 
 describe CouchRB::CouchFile do
   fixture = File.expand_path('../../fixture', __FILE__)
-  empty = File.join(fixture, 'empty.couch')
-  tiny  = File.join(fixture, 'tiny.couch')
-  medium = File.join(fixture, 'medium.couch')
+  empty   = File.join(fixture, 'empty.couch')
+  tiny    = File.join(fixture, 'tiny.couch')
+  medium  = File.join(fixture, 'medium.couch')
 
   describe 'parsing headers' do
     it 'parses headers of an empty db' do
