@@ -179,7 +179,7 @@ module CouchRB
         else
           handler = TYPE_MAP[id]
           result = handler ? send(handler) : :weird
-          #         p :handler => [id, handler, result]
+          # p :handler => [id, handler, result]
           result
         end
       end

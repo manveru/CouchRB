@@ -79,6 +79,7 @@ module CouchRB
       end
 
       def ==(header)
+        raise(ArgumentError, "argument has no #md5") unless header.respond_to?(:md5)
         @md5 == header.md5
       end
 
