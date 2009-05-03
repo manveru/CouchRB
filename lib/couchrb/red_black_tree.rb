@@ -70,7 +70,7 @@ module CouchRB
         right.each(&block) if right and right.value.id != value.id
       else
         left.each(&block) if left
-        yield self
+        yield self unless value.id == '_'
         right.each(&block) if right
       end
     end
