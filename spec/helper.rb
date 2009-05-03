@@ -45,7 +45,8 @@ class DB
   end
 
   def save(doc)
-    id = doc[:_id] || (doc['_id'] ||= CouchRB.uuid)
+    id = (doc[:_id] || (doc['_id'] ||= CouchRB.uuid)).to_s
+    doc['_id'] = id
     json = doc.to_json
 
     header 'CONTENT_LENGTH', json.bytesize
@@ -53,9 +54,9 @@ class DB
     header :input, json
     put(url(id))
 
-    doc['_rev'] = json_body['rev']
-
-    last_response
+    jbody = json_body
+    doc['_rev'] = jbody['rev']
+    jbody
   end
 
   def delete_doc(doc)
@@ -65,7 +66,7 @@ class DB
   end
 
   def open(id, options = {})
-    get(url(id.to_s), options)
+    got = get(url(id.to_s), options)
 
     json_body unless last_response.status == 404
   end

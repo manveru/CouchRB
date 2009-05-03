@@ -41,7 +41,8 @@ describe 'basics' do
   should 'create a document and save it to the database' do
     @doc_1 = {'_id' => '0', 'a' => 1, 'b' => 1}
 
-    @db.save(@doc_1).status.should == 200
+    @db.save(@doc_1)
+    @db.last_response.status.should == 200
 
     doc = @db.json_body
     doc['ok'].should == true
