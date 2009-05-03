@@ -84,6 +84,10 @@ module CouchRB
       }
     end
 
+    def ==(other)
+      self.id == other.id
+    end
+
     # This document is smaller than any other of the same revision
     class Min < self
       def <=>(other)

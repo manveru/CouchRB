@@ -40,13 +40,12 @@ module CouchRB
     # deleted.
     def find_latest(key)
       if deleted
-        if left
-          if key < value
-            unless left.value.id == value.id
-              return left.find_latest(key)
-            end
+        if left and key < value
+          unless left.value.id == value.id
+            return left.find_latest(key)
           end
         end
+
         if right
           unless right.value.id == value.id
             return right.find_latest(key)
