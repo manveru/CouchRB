@@ -56,4 +56,24 @@ describe CouchRB::RedBlackTree do
     tree = CouchRB::RedBlackTree[*ten_dogs]
     tree.find_latest(Doc['dog', :max]).value.should == Doc['dog', 9]
   end
+
+  it 'iterates with startkey' do
+    tree = CouchRB::RedBlackTree[*@dogs]
+    startkey = Doc['dog', 10]
+    all = []
+    result = tree.each_from(startkey){|node| all << node.value }
+    all.should == @dogs.sort[9..-1]
+    result[:offset].should == 9
+  end
+
+  it 'iterates with startkey and endkey' do
+    tree = CouchRB::RedBlackTree[*@dogs]
+    startkey = Doc['dog', 5]
+    endkey = Doc['dog', 15]
+
+    all = []
+    result = tree.each_within(startkey, endkey){|node| all << node.value }
+    all.should == @dogs.sort[4, 10]
+    result[:offset].should == 4
+  end
 end

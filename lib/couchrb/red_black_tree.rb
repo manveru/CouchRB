@@ -76,6 +76,64 @@ module CouchRB
       end
     end
 
+    def each_from(s_key, direction = :ascending)
+      s_key = self.class.new(s_key) unless s_key.is_a?(self.class)
+      offset = 0
+      total_rows = 0
+
+      send "each_#{direction}" do |node|
+        if node < s_key
+          offset += 1
+        else
+          total_rows += 1
+          yield(node)
+        end
+      end
+
+      {'offset' => offset, 'total_rows' => total_rows}
+    end
+
+    def each_within(s_key, e_key, direction = :ascending)
+      s_key = self.class.new(s_key) unless s_key.is_a?(self.class)
+      e_key = self.class.new(e_key) unless e_key.is_a?(self.class)
+      offset = 0
+      total_rows = 0
+
+      send "each_#{direction}" do |node|
+        if node < s_key
+          offset += 1
+        else
+          if node <= e_key
+            total_rows += 1
+            yield(node)
+          else
+            break
+          end
+        end
+      end
+
+      {'offset' => offset, 'total_rows' => total_rows}
+    end
+
+    def all_from(s_key, direction = :ascending)
+      answer = {}
+      rows = answer['rows'] = []
+      meta = each_from(s_key, direction){|node| rows << node.value }
+      answer.merge!(meta)
+    end
+
+    def all_within(s_key, e_key, direction = :ascending)
+      answer = {}
+      rows = answer['rows'] = []
+      meta = each_within(s_key, e_key, direction){|node| rows << node.value }
+      answer.merge!(meta)
+    end
+
+    def all(direction = :ascending)
+      s_key = Document::Min.new('0', '0')
+      all_from(s_key, direction)
+    end
+
     def <=>(other)
       raise(TypeError, "Not an RedBlackTree") unless other.is_a?(self.class)
       value <=> other.value
@@ -106,21 +164,30 @@ module CouchRB
       all
     end
 
+    def each_ascending(&block)
+      left.each_ascending(&block) if left
+      yield self unless value.id == '_'
+      right.each_ascending(&block) if right
+    end
+
     def all_ascending(all = [])
-      left.all_ascending(all) if left
-      all << value unless value.id == '_'
-      right.all_ascending(all) if right
+      each_ascending{|node| all << node.value }
       all
     end
 
+    def each_descending(&block)
+      right.each_descending(&block) if right
+      yield self unless value.id == '_'
+      left.each_descending(&block) if left
+    end
+
     def all_descending(all = [])
-      right.all_descending(all) if right
-      all << value unless value.id == '_'
-      left.all_descending(all) if left
+      each_descending{|node| all << node.value }
       all
     end
 
     def all_by_seq(all = [])
+      raise "not implemented"
     end
 
     def delete(key)

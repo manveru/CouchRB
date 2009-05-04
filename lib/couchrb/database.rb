@@ -75,13 +75,20 @@ module CouchRB
     def get_path(path, hash = {})
       case path
       when '/_all_docs'
-        if request[:descending]
-          rows = @docs.all_descending
-        else
-          rows = @docs.all_ascending
-        end
+        direction = request[:descending] ? :descending : :ascending
 
-        {:total_rows => rows.size, :rows => rows, :offset => 2}
+        if s_key = request[:startkey]
+          s_doc = Document.new(s_key, '1')
+
+          if e_key = request[:endkey]
+            e_doc = Document.new(e_key, '1')
+            @docs.all_within(s_doc, e_doc, direction)
+          else
+            @docs.all_from(s_doc, direction)
+          end
+        else
+          @docs.all(direction)
+        end
       when '/_all_docs_by_seq'
         rows = @docs.all_by_seq
         {:total_rows => rows.size, :rows => rows, :offset => 0}
