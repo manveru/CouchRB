@@ -4,11 +4,11 @@ shared :serializer do
   def parse(prefix, suffix)
     id = [prefix.to_s(16)].pack('H*')
     binary = "#{id}#{suffix}"
-    CouchRB::ErlangTerm.new(StringIO.new(binary)).next
+    CouchRB::Db::Term.new(StringIO.new(binary)).next
   end
 
   def dump(obj)
-    binary = CouchRB::ErlangTerm.dump(obj)
+    binary = CouchRB::Db::Term.dump(obj)
     id = binary[0,1].unpack('H*')[0].to_i(16)
     rest = binary[1..-1]
     [id, rest]
@@ -20,8 +20,8 @@ shared :serializer do
 end
 
 
-describe CouchRB::ErlangTerm do
-  ET = CouchRB::ErlangTerm
+describe CouchRB::Db::Term do
+  ET = CouchRB::Db::Term
 
   # Deserialize some objects that have equivalents in Ruby
   describe 'deserializing' do

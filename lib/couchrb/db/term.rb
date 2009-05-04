@@ -339,7 +339,7 @@ module CouchRB
       end
 
       def nil_ext
-        :nil
+        nil
       end
 
       # | 1   | 4     | N
@@ -589,6 +589,14 @@ module CouchRB
         def each(&block) elements.each(&block) end
 
         def inspect; elements.inspect; end
+
+        def ==(other)
+          if other.respond_to?(:elements)
+            elements == other.elements
+          else
+            elements == other
+          end
+        end
 
         def <=>(other)
           if other.respond_to?(:elements)
