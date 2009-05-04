@@ -1,4 +1,7 @@
 module CouchRB
+  class Exception < RuntimeError; end
+  class InvalidDocId < Exception; end
+
   class Document < Struct.new(:id, :rev, :doc, :seq)
     include Comparable
 
@@ -17,9 +20,15 @@ module CouchRB
     # in/out via base36, which is the most compact fast lossless conversion we
     # have available, this way we can compare internally correct and fast using
     # integers and present everybody outside with a String.
+    #
+    # All "normal" documents have to be created using this initialize method,
+    # only the root document is created using Document::Root.
     def initialize(id, rev, doc = {})
-      self.id, self.rev, self.doc =
-        id.to_str, rev.to_i(36), doc.dup
+      raise(InvalidDocId, 'doc id must be string') unless id.respond_to?(:to_str)
+      id = id.to_str
+      raise(InvalidDocId, 'doc id may not start with underscore') if id =~ /^_/
+
+      self.id, self.rev, self.doc = id, rev.to_i(36), doc.dup
 
       self.doc.delete '_rev'
       self.doc.delete '_id'
@@ -101,6 +110,15 @@ module CouchRB
       def <=>(other)
         comp = id <=> other.id
         comp == 0 ? 1 : comp
+      end
+    end
+
+    # No validation takes place here, the root document is generally invalid.
+    class Root < self
+      def initialize(id, rev, doc = {})
+        self.id, self.rev, self.doc = id, rev.to_i(36), doc.dup
+        self.doc.delete('_rev')
+        self.doc.delete('_id')
       end
     end
   end

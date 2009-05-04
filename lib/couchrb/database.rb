@@ -26,14 +26,14 @@ module CouchRB
 
     def initialize(name)
       @name = name
-      @docs = RedBlackTree.new(Document.new('_', '0'))
+      @docs = RedBlackTree.new(Document::Root.new('_', '0'))
       @doc_count = 0
       @update_sequence = 0
       Innate.map(url, self)
     end
 
     def call(env)
-      path = (env['PATH_INFO'] || '').sub(/^\//, '')
+      path = (env['PATH_INFO'] || '').sub(/\/$/, '')
       method = env['REQUEST_METHOD']
       hash = {}
 
@@ -47,7 +47,7 @@ module CouchRB
       if path.empty?
         body = process_empty(method, hash)
       else
-        body = process_path(method, path, hash)
+        body = send("#{method.to_s.downcase}_path", path, hash)
       end
 
       response.body = [body.to_json] if body
@@ -56,18 +56,15 @@ module CouchRB
 
     def process_empty(method, hash = {})
       case method
-      when 'GET'
-        info
-      when 'DELETE'
-        delete
+      when 'GET';   db_info
+      when 'DELETE'; db_delete
       when 'PUT'
         if hash.empty?
           response.status = 412
           { 'error'  => 'file_exists',
-            'reason' => 'The database could not be created, the file already exists.'
-          }
+            'reason' => 'The database could not be created, the file already exists.' }
         else
-          process_path(method, CouchRB.uuid)
+          put_path('/', hash)
         end
       else
         response.status = 405
@@ -75,52 +72,83 @@ module CouchRB
       end
     end
 
-    def process_path(method, path, hash = {})
-      case method
-      when 'GET'
-        case path
-        when '_all_docs'
-          if request[:descending]
-            rows = @docs.all_descending
-          else
-            rows = @docs.all_ascending
-          end
+    def get_path(path, hash = {})
+      case path
+      when '/_all_docs'
+        if request[:descending]
+          rows = @docs.all_descending
+        else
+          rows = @docs.all_ascending
+        end
 
-          {:total_rows => rows.size, :rows => rows, :offset => 2}
-        when '_all_docs_by_seq'
-          rows = @docs.all_by_seq
-          {:total_rows => rows.size, :rows => rows, :offset => 0}
+        {:total_rows => rows.size, :rows => rows, :offset => 2}
+      when '/_all_docs_by_seq'
+        rows = @docs.all_by_seq
+        {:total_rows => rows.size, :rows => rows, :offset => 0}
+      else
+        id = path.sub(/^\//, '')
+
+        if request['revs_info']
+          Document.refs_info
+        elsif rev = request[:rev]
+          find_doc(id, rev)
         else
-          if request['revs_info']
-            Document.refs_info
-          elsif rev = request[:rev]
-            find_doc(path, rev)
-          else
-            latest_doc(path)
-          end
+          latest_doc(id)
         end
-      when 'POST'
-        case path
-        when '_temp_view'
-          temp_view(hash)
-        else
-          response.status = 405
-          nil
-        end
-      when 'PUT'
+      end
+    end
+
+    def post_path(path, hash = {})
+      case path
+      when '/_temp_view'
+        temp_view(hash)
+      else
+        response.status = 405
+        nil
+      end
+    end
+
+    def put_path(path, hash = {})
+      case path
+      when '/'
+        id = hash['_id'] || CouchRB.uuid
+
         if rev = hash['_rev']
-          update_doc(path, rev, hash)
+          update_doc(id, rev, hash)
         else
-          put_doc(path, hash)
+          put_doc(id, hash)
         end
-      when 'DELETE'
+      when /^\/(.+)/
+        id = hash['_id'] || $1
+        put_doc(id, hash)
+      else
+        response.status = 405
+        nil
+      end
+    end
+
+    def delete_path(path, hash = {})
+      case path
+      when '/'
+        id = hash['_id']
+
         if rev = request['rev']
-          delete_doc(path, rev)
+          delete_doc(id, rev)
         else
-          delete_latest_doc(path)
+          delete_latest_doc(id)
+        end
+      when /^\/(.+)/
+        p :delete_path => [path, hash]
+        id = hash['_id'] || $1
+
+        if rev = request['rev']
+          delete_doc(id, rev)
+        else
+          delete_latest_doc(id)
         end
       else
         response.status = 405
+        nil
       end
     end
 
@@ -172,6 +200,9 @@ module CouchRB
         response['Location'] = "/#{name}/#{doc.id}"
         doc.version_hash.merge('ok' => true)
       end
+    rescue CouchRB::Exception => ex
+      response.status = 400
+      {'error' => 'bad_request', 'reason' => ex.message}
     end
 
     def update_doc(id, rev, hash)
@@ -189,6 +220,7 @@ module CouchRB
     end
 
     def delete_doc(id, rev)
+      p :delete_doc => [id, rev]
       needle = Document.new(id, rev)
 
       if found = @docs.find_value(needle)
@@ -214,11 +246,11 @@ module CouchRB
       end
     end
 
-    def info
+    def db_info
       {'db_name' => name, 'doc_count' => @doc_count}
     end
 
-    def delete
+    def db_delete
       Innate::DynaMap.delete(url)
       Database.delete(name)
 
