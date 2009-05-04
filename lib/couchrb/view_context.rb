@@ -10,7 +10,7 @@ module CouchRB
     end
 
     def run_map
-      @db.docs.each{|doc| yield(doc.value) }
+      @db.docs.each{|doc| yield(doc.value.dup) }
     end
 
     def run_reduce
