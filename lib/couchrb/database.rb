@@ -145,7 +145,6 @@ module CouchRB
           delete_latest_doc(id)
         end
       when /^\/(.+)/
-        p :delete_path => [path, hash]
         id = hash['_id'] || $1
 
         if rev = request['rev']
@@ -227,7 +226,6 @@ module CouchRB
     end
 
     def delete_doc(id, rev)
-      p :delete_doc => [id, rev]
       needle = Document.new(id, rev)
 
       if found = @docs.find_value(needle)
