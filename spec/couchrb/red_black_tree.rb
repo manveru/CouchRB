@@ -33,27 +33,27 @@ class Doc < Struct.new(:id, :rev)
 end
 
 describe CouchRB::RedBlackTree do
+  @dogs = [11,4,8,14,17,6,9,7,16,2,15,13,5,19,18,12,10,3,20,1]
+  @dogs.map!{|v| Doc['dog', v] }
+
   it 'inserts and iterates' do
-    values = [11,4,8,14,17,6,9,7,16,2,15,13,5,19,18,12,10,3,20,1]
-    tree = CouchRB::RedBlackTree[*values]
+    tree = CouchRB::RedBlackTree[*@dogs]
 
     all = []
     tree.each{|node| all << node.value }
-    all.should == values.sort
+    all.should == @dogs.sort
   end
 
   it 'inserts and searches' do
-    values = [11,4,8,14,17,6,9,7,16,15,13,5,19,18,12,10,3,20,1]
-
-    tree = CouchRB::RedBlackTree[*values]
-    tree.find(16).should == CouchRB::RedBlackTree.new(16)
+    tree = CouchRB::RedBlackTree[*@dogs]
+    dog = Doc['dog', 16]
+    tree.find_value(dog).should == dog
   end
 
   it 'inserts multiple revisions and finds the latest' do
     ten_dogs = Array.new(10){|i| Doc['dog', i] }
 
     tree = CouchRB::RedBlackTree[*ten_dogs]
-    puts
     tree.find_latest(Doc['dog', :max]).value.should == Doc['dog', 9]
   end
 end

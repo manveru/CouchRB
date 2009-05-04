@@ -1,6 +1,7 @@
 module CouchRB
   RED_BLACK_TREE_MEMBERS = [ :value, :color, :left, :right, :deleted ]
 
+  # value has to respond to #id (not the default Object#id)
   class RedBlackTree < Struct.new(*RED_BLACK_TREE_MEMBERS)
     include Comparable
     include Enumerable
@@ -94,8 +95,6 @@ module CouchRB
       if parent
         io.puts("%p [color=%s];" % [value, color])
         io.puts("%p -> %p;" % [parent, value])
-      else
-        # io.puts("%p;" % value)
       end
       right.to_dot(io, value) if right
     end
@@ -109,14 +108,14 @@ module CouchRB
 
     def all_ascending(all = [])
       left.all_ascending(all) if left
-      all << value if value.id != '_'
+      all << value unless value.id == '_'
       right.all_ascending(all) if right
       all
     end
 
     def all_descending(all = [])
       right.all_descending(all) if right
-      all << value if value.id != '_'
+      all << value unless value.id == '_'
       left.all_descending(all) if left
       all
     end
