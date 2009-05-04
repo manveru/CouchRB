@@ -60,9 +60,14 @@ class DB
   end
 
   def delete_doc(doc)
+    header :input, nil
     delete(url(doc['_id']), :rev => doc['_rev'])
+    result = json_body
 
-    json_body
+    doc['_rev'] = result['rev']
+    doc['_deleted'] = true
+
+    return result
   end
 
   def open(id, options = {})
