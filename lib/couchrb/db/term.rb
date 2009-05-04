@@ -152,7 +152,7 @@ module CouchRB
             binary_size = [size].pack('N')
             binary_join(105, binary_size, binary_elements)
           end
-        when nil
+        when nil, Nil
           binary_join(106)
         when List, Array
           binary_elements = []
@@ -339,7 +339,7 @@ module CouchRB
       end
 
       def nil_ext
-        nil
+        Nil.new
       end
 
       # | 1   | 4     | N
@@ -567,6 +567,11 @@ module CouchRB
       class Reference    < Struct.new(:node, :id, :creation)
         include PrettyTerm
       end
+      class Nil
+        def ==(other)
+          other.is_a?(self.class)
+        end
+      end
 
       class Tuple < Struct.new(:elements);
         include Comparable, Enumerable
@@ -574,6 +579,7 @@ module CouchRB
         def each(&block) elements.each(&block) end
 
         def inspect; elements.inspect; end
+        def pretty_print(q); elements.pretty_print(q); end
 
         def <=>(other)
           if other.respond_to?(:elements)
@@ -589,6 +595,7 @@ module CouchRB
         def each(&block) elements.each(&block) end
 
         def inspect; elements.inspect; end
+        def pretty_print(q); elements.pretty_print(q); end
 
         def ==(other)
           if other.respond_to?(:elements)

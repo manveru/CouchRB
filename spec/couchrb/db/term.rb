@@ -170,7 +170,7 @@ describe CouchRB::Db::Term do
     # I'm not sure whether this is kosher, but seems so...
     # There must be some lisp buried underneath all that erlang
     should 'handle List' do
-      value = ET::List.new([100, 200, 300, ET::List.new([nil])])
+      value = ET::List.new([100, 200, 300, ET::List.new([ET::Nil.new])])
       roundtrip(value).should == value
       roundtrip(roundtrip(value)).should == value
     end
