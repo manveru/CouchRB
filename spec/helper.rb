@@ -45,14 +45,14 @@ class DB
   end
 
   def save(doc)
-    id = (doc[:_id] || (doc['_id'] ||= CouchRB.uuid)).to_s
+    id = (doc[:_id] || (doc['_id'] ||= CouchRB.uuid))
     doc['_id'] = id
     json = doc.to_json
 
     header 'CONTENT_LENGTH', json.bytesize
     header 'CONTENT_TYPE', 'application/json'
     header :input, json
-    put(url(id))
+    put(url)
 
     jbody = json_body
     doc['_rev'] = jbody['rev']
