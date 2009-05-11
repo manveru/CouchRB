@@ -285,33 +285,32 @@ module CouchRB
           node_list = []
         else
           pointer, _reds = *root_pointer_info
-          fail 'no reds' unless _reds
+          # fail 'no reds' unless _reds
           node_type, node_list = *get_node(bt, pointer)
         end
 
-        node_tuple = node_list # node_tuple = node_list.to_tuple
-        p :node_type => node_type, :node_tuple => node_tuple
+        p :node_type => node_type, :node_list => node_list
 
         case node_type
         when :kp_node
-          new_node_list, query_output2, bt2 =
-            *modify_kpnode(bt, node_tuple, 1, actions, [], query_output)
+          result = modify_kpnode(bt, node_list, 1, actions, [], query_output)
+          new_node_list, query_output2, bt2 = *result
         when :kv_node
-          new_node_list, query_output2, bt2 =
-            *modify_kvnode(bt, node_tuple, 1, actions, [], query_output)
+          result = modify_kvnode(bt, node_list, 1, actions, [], query_output)
+          new_node_list, query_output2, bt2 = *result
         else
           raise('No such node_type: %p' % node_type)
         end
 
         fail 'no bt2' unless bt2
-        p :new_node_list => new_node_list, :query_output2 => query_output2, :bt2 => bt2
+        pp :result => result, :new_node_list => new_node_list, :query_output2 => query_output2, :bt2 => bt2
         p caller
 
         case new_node_list
         when [] # no nodes remain
           return [], query_output2, bt2
         when node_list # nothing changed
-          last_key, last_value = element(node_tuple.size, node_tuple)
+          last_key, last_value = element(node_list.size, node_list)
           return [last_key, root_pointer_info], query_output2, bt2
         else
           result_list, bt3 = write_node(bt2, node_type, new_node_list)
@@ -374,9 +373,7 @@ module CouchRB
 
             if n == node_tuple.size
               # perform remaining actions on last node
-              # p :node_tuple => node_tuple
-              # p :last_node_tuple => node_tuple.last
-              pointer_info = node_tuple[-1]
+              _, pointer_info = element(node_tuple.size, node_tuple)
 
               child_kps, query_output2, bt2 =
                 modify_node(bt, pointer_info, actions, query_output)
@@ -390,7 +387,7 @@ module CouchRB
               return node_list, query_output2, bt2
             else
               node_key, pointer_info = element(n, node_tuple)
-              # p :node_key => node_key, :pointer_info => pointer_info
+              p :node_key => node_key, :pointer_info => pointer_info
 
               less_eq_queries, greater_queries =
                 actions.partition{|(action_type, action_key, action_value)|
@@ -596,14 +593,24 @@ module CouchRB
       # reduce_node(#btree{reduce=R}=Bt, kv_node, NodeList) ->
       #     R(reduce, [assemble(Bt, K, V) || {K, V} <- NodeList]).
       def reduce_node(bt, node_type, node_list)
-        pp :reduce_node => {:bt => bt, :node_type => node_type, :node_list => node_list}
+        # pp :reduce_node => {:bt => bt, :node_type => node_type, :node_list => node_list}
         return [] unless bt.reduce
 
         case node_type
         when :kp_node
-          bt.reduce.call(:rereduce, node_list[0..-2])
+          nodes = node_list.map{|(_k, (_p, red))|
+            # p :rereduce => {:_k => _k, :_p => _p, :red => red}
+            red
+          }
+          bt.reduce.call(:rereduce, nodes)
         when :kv_node
-          bt.reduce.call(:reduce, node_list[0..-2])
+          nodes = node_list.map{|(key, value)|
+            # p :reduce => {:key => key, :value => value}
+            [key, value]
+          }
+          bt.reduce.call(:reduce, nodes)
+        else
+          raise 'invalid node_type: %p' % [node_type]
         end
       end
 
