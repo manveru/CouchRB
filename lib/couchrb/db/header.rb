@@ -131,7 +131,7 @@ module CouchRB
 
           _atom, @disc_version, @update_seq, @summary_stream_state,
             @fulldocinfo_by_id_btree_state, @docinfo_by_seq_btree_state,
-            @local_docs_btree_state, @purge_seq = @term.elements
+            @local_docs_btree_state, @purge_seq = *@term
         end
 
         def to_binary

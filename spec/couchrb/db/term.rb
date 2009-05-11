@@ -65,7 +65,7 @@ describe CouchRB::Db::Term do
       value = 'db_header'
       length = [value.bytesize].pack('n')
       atom = parse(100, "#{length}#{value}")
-      atom.value.should == value
+      atom.should == value.to_sym
     end
 
     # should 'handle Reference' do
@@ -153,7 +153,7 @@ describe CouchRB::Db::Term do
     end
 
     should 'handle Atom' do
-      value = ET::Atom.new('db_header')
+      value = :db_header
       roundtrip(value).should == value
     end
 
@@ -167,10 +167,14 @@ describe CouchRB::Db::Term do
       roundtrip(value).should == value
     end
 
-    # I'm not sure whether this is kosher, but seems so...
-    # There must be some lisp buried underneath all that erlang
     should 'handle List' do
-      value = ET::List.new([100, 200, 300, ET::List.new([ET::Nil.new])])
+      value = [100, 200, 300]
+      roundtrip(value).should == value
+      roundtrip(roundtrip(value)).should == value
+    end
+
+    should 'handle List with nil values' do
+      value = [[100, nil], [200, nil], [300, nil]]
       roundtrip(value).should == value
       roundtrip(roundtrip(value)).should == value
     end

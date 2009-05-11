@@ -70,7 +70,7 @@ module CouchRB
 
       def each
         if block_given?
-          while term = self.next
+          while (ok, term = self.next; ok)
             yield term
           end
         else
@@ -79,18 +79,15 @@ module CouchRB
       end
 
       def next
-        until io.eof?
-          case result = step
-          when :null, :weird, nil
-          else
-            return result
-          end
-        end
+        return if io.eof?
+        ok, term = step
+        return term if ok
       end
       alias walking next # don't wanna type self.next
 
       def next_term
         term_start = self.next
+
         if term_start == 131
           self.next
         else
@@ -135,8 +132,8 @@ module CouchRB
           end
         when Float
           binary_join(70, [obj].pack('G'))
-        when Atom
-          value  = obj.value
+        when Symbol # We use that as our Atom
+          value  = obj.to_s
           length = [value.bytesize].pack('n')
           data   = value
 
@@ -152,13 +149,15 @@ module CouchRB
             binary_size = [size].pack('N')
             binary_join(105, binary_size, binary_elements)
           end
-        when nil, Nil
+        when nil
           binary_join(106)
         when List, Array
           binary_elements = []
           obj.each{|l| binary_elements << dump(l) }
+
           size = binary_elements.size
           binary_length = [size].pack('N')
+
           binary_join(108, binary_length, *binary_elements)
         else
           raise("Cannot dump: %p" % [obj])
@@ -173,14 +172,13 @@ module CouchRB
       end
 
       def step
-        case id = read(1)
-        when 0
-          :null
+        id = read(1)
+
+        if handler = TYPE_MAP[id]
+          got = send(handler)
+          return :ok, got
         else
-          handler = TYPE_MAP[id]
-          result = handler ? send(handler) : :weird
-          # p :handler => [id, handler, result]
-          result
+          raise "No handler for %p" % [id]
         end
       end
 
@@ -270,10 +268,11 @@ module CouchRB
       #       defined data structure that is bound to them.
       #       Other atoms like 'nil', 'true', and 'false' are
       #       only themselves.
+      #
+      # Note: We simply use Symbol here, as it maps well with the Ruby symbol
       def atom_ext
         length = read(2, 'n')
-
-        Atom.new(io.read(length))
+        io.read(length).to_sym
       end
 
       # | 1   | N    | 4  | 1
@@ -339,7 +338,7 @@ module CouchRB
       end
 
       def nil_ext
-        Nil.new
+        nil
       end
 
       # | 1   | 4     | N
@@ -386,8 +385,7 @@ module CouchRB
       def list_ext
         length = read(4, 'N')
         list = Array.new(length){ walking }
-        tail = walking # ignore tail for now...
-        List.new(list)
+        list
       end
 
       # | 1   | 4      | Length
@@ -538,6 +536,33 @@ module CouchRB
         puts("%-20s: %p" % [msg, hash])
       end
 
+      module ArrayLike
+        def each(&block) elements.each(&block) end
+        def inspect; elements.inspect; end
+        def pretty_print(q); elements.pretty_print(q); end
+
+        def <=>(other)
+          if other.respond_to?(:elements)
+            elements <=> other.elements
+          else
+            elements <=> other
+          end
+        end
+
+        def [](idx)
+          case idx
+          when Fixnum
+            elements[idx]
+          else
+            super
+          end
+        end
+
+        def to_a
+          elements.dup
+        end
+      end
+
       module PrettyTerm
         def inspect
           old = super
@@ -545,73 +570,52 @@ module CouchRB
           name = full_name.split('::').last
           old.sub("struct #{full_name}", name)
         end
+
+        def pretty_print(q)
+          name = self.class.name.split('::').last
+
+          q.group(1, "#<#{name}", '>') {
+            q.seplist(self.class.members, lambda { q.text "," }) {|member|
+            q.breakable
+            q.text member.to_s
+            q.text '='
+            q.group(1) {
+              q.breakable ''
+              q.pp self[member]
+            }
+          }
+          }
+        end
+
+        def pretty_print_cycle(q)
+          q.text sprintf("#<struct %s:...>", PP.mcall(self, Kernel, :class).name)
+        end
       end
 
       # Classes to hold Erlang structures so we don't lose them
 
-      class Atom         < Struct.new(:value)
+      class Export < Struct.new(:module, :function, :arity)
         include PrettyTerm
       end
-      class Export       < Struct.new(:module, :function, :arity)
-        include PrettyTerm
-      end
-      class NewFunction  < Struct.new(:binary)
+      class NewFunction < Struct.new(:binary)
         include PrettyTerm
       end
       class NewReference < Struct.new(:length, :node, :creation, :n_prime)
         include PrettyTerm
       end
-      class PID          < Struct.new(:node, :id, :serial, :creation)
+      class PID < Struct.new(:node, :id, :serial, :creation)
         include PrettyTerm
       end
-      class Reference    < Struct.new(:node, :id, :creation)
+      class Reference < Struct.new(:node, :id, :creation)
         include PrettyTerm
-      end
-      class Nil
-        def ==(other)
-          other.is_a?(self.class)
-        end
       end
 
       class Tuple < Struct.new(:elements);
-        include Comparable, Enumerable
-
-        def each(&block) elements.each(&block) end
-
-        def inspect; elements.inspect; end
-        def pretty_print(q); elements.pretty_print(q); end
-
-        def <=>(other)
-          if other.respond_to?(:elements)
-            elements <=> other.elements
-          else
-            elements <=> other
-          end
-        end
+        include Comparable, Enumerable, ArrayLike
       end
+
       class List < Struct.new(:elements)
-        include Comparable, Enumerable, PrettyTerm
-
-        def each(&block) elements.each(&block) end
-
-        def inspect; elements.inspect; end
-        def pretty_print(q); elements.pretty_print(q); end
-
-        def ==(other)
-          if other.respond_to?(:elements)
-            elements == other.elements
-          else
-            elements == other
-          end
-        end
-
-        def <=>(other)
-          if other.respond_to?(:elements)
-            elements <=> other.elements
-          else
-            elements <=> other
-          end
-        end
+        include Comparable, Enumerable, ArrayLike
       end
     end
   end
