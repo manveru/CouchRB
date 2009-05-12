@@ -40,7 +40,7 @@ module CouchRB
       #     % order back into the results.
       #     KeyDict = dict:from_list(SortedResults),
       #     [dict:fetch(Key, KeyDict) || Key <- Keys].
-      # 
+      #
       # lookup(_Bt, nil, Keys) ->
       #     {ok, [{Key, not_found} || Key <- Keys]};
       # lookup(Bt, {Pointer, _Reds}, Keys) ->
@@ -128,10 +128,10 @@ module CouchRB
 
       # lookup_kpnode(_Bt, _NodeTuple, _LowerBound, [], Output) ->
       #     {ok, lists:reverse(Output)};
-      #     
+      #
       # lookup_kpnode(_Bt, NodeTuple, LowerBound, Keys, Output) when size(NodeTuple) < LowerBound ->
       #     {ok, lists:reverse(Output, [{Key, not_found} || Key <- Keys])};
-      # 
+      #
       # lookup_kpnode(Bt, NodeTuple, LowerBound, [FirstLookupKey | _] = LookupKeys, Output) ->
       #     N = find_first_gteq(Bt, NodeTuple, LowerBound, size(NodeTuple), FirstLookupKey),
       #     {Key, PointerInfo} = element(N, NodeTuple),
@@ -207,7 +207,7 @@ module CouchRB
       #     {ok, [], Bt2} = query_modify(Bt, [], InsertKeyValues, RemoveKeys),
       #     {ok, Bt2}.
       def add_remove(bt, insert_key_values, remove_keys = [])
-        pp :add_remove => {:bt => bt, :insert_key_values => insert_key_values, :remove_keys => remove_keys}
+        # pp :add_remove => {:bt => bt, :insert_key_values => insert_key_values, :remove_keys => remove_keys}
         left, bt2 = query_modify(bt, [], insert_key_values, remove_keys)
         fail "left is not []" unless left == []
         bt2
@@ -241,7 +241,7 @@ module CouchRB
       #     {ok, QueryResults, Bt3#btree{root=NewRoot}}.
 
       def query_modify(bt, lookup_keys, insert_values, remove_keys)
-        pp :query_modify => {:bt => bt, :lookup_keys => lookup_keys, :insert_values => insert_values, :remove_keys => remove_keys}
+        # pp :query_modify => {:bt => bt, :lookup_keys => lookup_keys, :insert_values => insert_values, :remove_keys => remove_keys}
         root = bt.root # FIXME: is that really what it should do?
 
         insert_actions = insert_values.map{|key_value| [:insert, *key_value] }
@@ -251,16 +251,16 @@ module CouchRB
         unsorted_actions = (insert_actions + remove_actions + fetch_actions)
         actions = unsorted_actions.sort{|(op_a, a, _), (op_b, b, _)|
           if less(a, b)
-            1
-          elsif less(b, a)
             -1
+          elsif less(b, a)
+            1
           else
             op_order(op_a) <=> op_order(op_b)
           end
         }
 
         key_pointers, query_results, bt2 = modify_node(bt, root, actions, [])
-        p :key_pointers => key_pointers, :query_results => query_results, :bt2 => bt2
+        # p :key_pointers => key_pointers, :query_results => query_results, :bt2 => bt2
         new_root, bt3 = complete_root(bt2, *key_pointers)
         bt4 = bt3.dup # seems like erlang does this
         bt4.root = new_root
@@ -277,8 +277,7 @@ module CouchRB
       end
 
       def modify_node(bt, root_pointer_info, actions, query_output)
-        pp :modify_node => {:bt => bt, :root_pointer_info => root_pointer_info, :actions => actions, :query_output => query_output}
-        # p caller
+        # pp :modify_node => {:bt => bt, :root_pointer_info => root_pointer_info, :actions => actions, :query_output => query_output}
 
         if root_pointer_info == nil
           node_type = :kv_node
@@ -289,7 +288,7 @@ module CouchRB
           node_type, node_list = *get_node(bt, pointer)
         end
 
-        p :node_type => node_type, :node_list => node_list
+        # p :node_type => node_type, :node_list => node_list
 
         case node_type
         when :kp_node
@@ -303,8 +302,7 @@ module CouchRB
         end
 
         fail 'no bt2' unless bt2
-        pp :result => result, :new_node_list => new_node_list, :query_output2 => query_output2, :bt2 => bt2
-        p caller
+        # pp :result => result, :new_node_list => new_node_list, :query_output2 => query_output2, :bt2 => bt2
 
         case new_node_list
         when [] # no nodes remain
@@ -320,7 +318,7 @@ module CouchRB
       end
 
       def get_node(bt, pos)
-        pp :get_node => {:pos => pos}
+        # pp :get_node => {:pos => pos}
         node_type, node_list = *bt.fd.pread_term(pos)
       end
 
@@ -354,8 +352,7 @@ module CouchRB
       #         modify_kpnode(Bt2, NodeTuple, N+1, GreaterQueries, ResultNode2, QueryOutput2)
       #     end.
       def modify_kpnode(bt, node_tuple, lower_bound, actions, result_node, query_output)
-        pp :modify_kpnode => { :bt => bt, :node_tuple => node_tuple, :lower_bound => lower_bound, :actions => actions, :result_node => result_node }
-        # p caller
+        # pp :modify_kpnode => { :bt => bt, :node_tuple => node_tuple, :lower_bound => lower_bound, :actions => actions, :result_node => result_node }
 
         if node_tuple.empty? and result_node.empty?
           modify_node(bt, nil, actions, query_output)
@@ -373,7 +370,10 @@ module CouchRB
 
             if n == node_tuple.size
               # perform remaining actions on last node
+              # p :n => n
+              # p node_tuple
               _, pointer_info = element(node_tuple.size, node_tuple)
+              # p :_ => _, :pointer_info => pointer_info
 
               child_kps, query_output2, bt2 =
                 modify_node(bt, pointer_info, actions, query_output)
@@ -387,7 +387,7 @@ module CouchRB
               return node_list, query_output2, bt2
             else
               node_key, pointer_info = element(n, node_tuple)
-              p :node_key => node_key, :pointer_info => pointer_info
+              # p :node_key => node_key, :pointer_info => pointer_info
 
               less_eq_queries, greater_queries =
                 actions.partition{|(action_type, action_key, action_value)|
@@ -458,7 +458,7 @@ module CouchRB
       # erlang but we don't have pattern matching.
       # and then it's still recursive too...
       def modify_kvnode(bt, node_tuple, lower_bound, actions, result_node, query_output)
-        pp :modify_kvnode => { :bt => bt, :node_tuple => node_tuple, :lower_bound => lower_bound, :actions => actions, :result_node => result_node, :query_output => query_output, }
+        # pp :modify_kvnode => { :bt => bt, :node_tuple => node_tuple, :lower_bound => lower_bound, :actions => actions, :result_node => result_node, :query_output => query_output, }
 
         if actions.empty?
           # p [result_node, bounded_tuple_to_list(node_tuple, lower_bound, node_tuple.size, [])]
@@ -471,17 +471,17 @@ module CouchRB
           # p :action_type => action_type, :action_key => action_key, :action_value => action_value
 
           if lower_bound > node_tuple.size
-            p :lower_bound => lower_bound, :node_tuple_size => node_tuple.size
+            # p :lower_bound => lower_bound, :node_tuple_size => node_tuple.size
 
             case action_type
             when :insert
-              p 'lower_bound > node_tuple.size, so insert'
+              # p 'lower_bound > node_tuple.size, so insert'
               modify_kvnode(bt, node_tuple, lower_bound, rest_actions, [[action_key, action_value], *result_node], query_output)
             when :remove
-              p 'lower_bound > node_tuple.size, just drop the action'
+              # p 'lower_bound > node_tuple.size, just drop the action'
               modify_kvnode(bt, node_tuple, lower_bound, rest_actions, result_node, query_output)
             when :fetch
-              p 'the key/value must not exist in the tree'
+              # p 'the key/value must not exist in the tree'
               modify_kvnode(bt, node_tuple, lower_bound, rest_actions, result_node, [[:not_found, [action_key, nil]], *query_output])
             else
               raise 'unknown action_type'
@@ -493,23 +493,23 @@ module CouchRB
             key, value = element(n, node_tuple)
             result_node = bounded_tuple_to_list(node_tuple, lower_bound, n - 1, acc_node)
 
-            if action_key < key
-              p :action_key => action_key, :key => key
+            if less(action_key, key)
+              # p :action_key => action_key, :key => key
               case action_type
               when :insert
-                p 'action_key is less than the key, so insert'
+                # p 'action_key is less than the key, so insert'
                 modify_kvnode(bt, node_tuple, n, rest_actions, [[action_key, action_value], *result_node], query_output)
               when :remove
-                p 'action_key is less than the key, just drop the action'
+                # p 'action_key is less than the key, just drop the action'
                 modify_kvnode(bt, node_tuple, n, rest_actions, result_node, query_output)
               when :fetch
-                p 'action_key is less than the key, the key/value must not exist in the tree'
+                # p 'action_key is less than the key, the key/value must not exist in the tree'
                 modify_kvnode(bt, node_tuple, n, rest_actions, [[action_key, action_value], *result_node], query_output)
               else
                 raise 'unknown action_type'
               end
             else
-              if key < action_key
+              if less(key, action_key)
                 case action_type
                 when :insert
                   # p 'action_key is equal to key, so insert'
@@ -553,7 +553,7 @@ module CouchRB
       # split up nodes into smaller sizes and write them out each chunk,
       # returning the key_pointer pairs for those nodes
       def write_node(bt, node_type, node_list)
-        pp :write_node => {:bt => bt, :node_type => node_type, :node_list => node_list}
+        # pp :write_node => {:bt => bt, :node_type => node_type, :node_list => node_list}
         node_list_list = [node_list]
 
         result_list = node_list_list.map{|a_node_list|
@@ -616,14 +616,14 @@ module CouchRB
 
       # +dir+ is the direction (:fwd || :rev)
       def stream_node(bt, reds, pointer_info, acc, dir, start_key = nil, &fun)
-        pp :stream_node => {:bt => bt, :reds => reds, :pointer_info => pointer_info, :start_key => start_key, :dir => dir, :acc => acc}
+        # pp :stream_node => {:bt => bt, :reds => reds, :pointer_info => pointer_info, :start_key => start_key, :dir => dir, :acc => acc}
         pointer, _reds  = pointer_info
-        # p :stream_node => { :reds => reds, :pointer_info => pointer_info, :pointer => pointer, :_reds => _reds, :start_key => start_key, :dir => dir, :acc => acc}
+        # p :stream_node => { :_reds => _reds, :pointer => pointer }
 
         return :ok, acc if pointer_info.nil?
 
         node_type, node_list = get_node(bt, pointer)
-        p :node_type => node_type, :node_list => node_list
+        # p :node_type => node_type, :node_list => node_list
         adjusted_list = adjust_dir(dir, node_list)
         # p :adjusted_list => adjusted_list
 
@@ -689,16 +689,15 @@ module CouchRB
       # stream_kp_node(Bt, Reds, [{_Key, {Pointer, Red}} | Rest],           Dir, Fun, Acc) ->
       # stream_kp_node(Bt, Reds, KPs,                             StartKey, Dir, Fun, Acc) ->
       def stream_kp_node(bt, reds, kps, acc, dir, start_key = nil, &fun)
-        pp :stream_kp_node => {:bt => bt, :reds => reds, :acc => acc, :dir => dir, :start_key => start_key}
-        p caller
+        # pp :stream_kp_node => {:bt => bt, :reds => reds, :acc => acc, :dir => dir, :start_key => start_key}
         return :ok, acc if kps.empty?
 
         unless start_key
-          p :kps => kps
+          # p :kps => kps
           _key, (pointer, red), *rest = *kps
-          p :_key => _key, :pointer => pointer, :red => red, :rest => rest
+          # p :_key => _key, :pointer => pointer, :red => red, :rest => rest
           result, acc2 = stream_node(bt, reds, [pointer, red], acc, dir, &fun)
-          p :result => result, :acc2 => acc2
+          # p :result => result, :acc2 => acc2
 
           case result
           when :ok
@@ -715,7 +714,7 @@ module CouchRB
           when :rev
             # keep all nodes sorting before the key, AND the first node to sort after
             rev_kps = kps.reverse
-            revs_before, revs_after = rev_kps.partition{|(key, pointer)| key < start_key }
+            revs_before, revs_after = rev_kps.partition{|(key, pointer)| less(key, start_key) }
             if revs_after.empty?
               # everything sorts before it
               new_reds, nodes_to_stream = reds, kps
@@ -771,22 +770,19 @@ module CouchRB
       #     {LTKVs, GTEKVs} = lists:splitwith(DropFun, KVs),
       #     AssembleLTKVs = [assemble(Bt,K,V) || {K,V} <- LTKVs],
       #     stream_kv_node2(Bt, Reds, AssembleLTKVs, GTEKVs, Dir, Fun, Acc).
-      #
-      # stream_kv_node2(_Bt, _Reds, _PrevKVs, [], _Dir, _Fun, Acc) ->
-      #     {ok, Acc};
-      #
-      # stream_kv_node2(Bt, Reds, PrevKVs, [{K,V} | RestKVs], Dir, Fun, Acc) ->
-      #     AssembledKV = assemble(Bt, K, V),
-      #     case Fun(AssembledKV, {PrevKVs, Reds}, Acc) of
-      #     {ok, Acc2} ->
-      #         stream_kv_node2(Bt, Reds, [AssembledKV | PrevKVs], RestKVs, Dir, Fun, Acc2);
-      #     {stop, Acc2} ->
-      #         {stop, Acc2}
-      #     end.
-      def stream_kv_node(bt, reds, kvs, start_key, acc, dir, &fun)
-        pp :stream_kv_node => {:bt => bt, :reds => reds, :kvs => kvs, :start_key => start_key, :dir => dir, :acc => acc}
-        return :ok, acc if kvs.empty?
-        raise 'not implemented'
+      def stream_kv_node(bt, reds, kvs, acc, dir, start_key, &fun)
+        case dir
+        when :fwd
+          drop_fun = lambda{|(key, _)| less(key, start_key) }
+        when :rev
+          drop_fun = lambda{|(key, _)| less(start_key, key) }
+        else
+          raise 'unknown dir: %p' % [dir]
+        end
+
+        ltkvs, gtekvs = kvs.partition(&drop_fun)
+        # pp :kvs => kvs, :ltkvs => ltkvs, :gtekvs => gtekvs
+        stream_kv_node2(bt, reds, ltkvs, gtekvs, acc, dir, &fun)
       end
 
       # stream_kv_node2(_Bt, _Reds, _PrevKVs, [], _Dir, _Fun, Acc) ->
@@ -800,29 +796,23 @@ module CouchRB
       #         {stop, Acc2}
       #     end.
       def stream_kv_node2(bt, reds, prev_kvs, kvs, acc, dir, &fun)
-        pp :stream_kv_node2 => {:bt => bt, :reds => reds, :prev_kvs => prev_kvs, :kvs => kvs, :acc => acc, :dir => dir}
+        # pp :stream_kv_node2 => {:bt => bt, :reds => reds, :prev_kvs => prev_kvs, :kvs => kvs, :acc => acc, :dir => dir}
         kvs = [*kvs]
-        return acc if kvs.empty?
+        return [:ok, acc] if kvs.empty?
 
-        previous = prev_kvs.dup
+        (key, value), *tail = *kvs
 
-        kvs.each do |key, value|
-          kv = [key, value]
-          previous = kv
+        assembled_kv = [key, value]
+        result, acc2 = yield(assembled_kv, [prev_kvs, reds], acc)
 
-          status, acc = yield(kv, [previous, reds], acc)
-#           previous.unshift(kv)
-
-          case status
-          when :ok
-          when :stop
-            return :stop, acc
-          else
-            raise "invalid return status"
-          end
+        case result
+        when :ok
+          stream_kv_node2(bt, reds, [assembled_kv, *prev_kvs], tail, acc2, dir, &fun)
+        when :stop
+          [:stop, acc2]
+        else
+          raise 'unknown result: %p' % [result]
         end
-
-        return :ok, acc
       end
 
       # final_reduce(#btree{reduce=Reduce}, Val) ->
@@ -840,13 +830,25 @@ module CouchRB
       # final_reduce(Reduce, {KVs, Reductions}) ->
       #     Red = Reduce(reduce, KVs),
       #     final_reduce(Reduce, {[], [Red | Reductions]}).
-      def final_reduce(bt, leading_reductions, &reduce)
-        pp :final_reduce => {:bt => bt, :leading_reductions => leading_reductions}
+      def final_reduce(bt, list, &reduce)
         if block_given?
-          reduced = leading_reductions.map{|kv| yield(:reduce, kv) }
-          yield(:rereduce, reduced)
+          head, tail = *list
+          # pp :final_reduce => {:bt => bt, :list => list, :head => head, :tail => tail}
+
+          if head.empty? and tail.empty?
+            yield(:reduce, [])
+          elsif head == []
+            if tail.size == 1
+              return tail.first
+            else
+              yield(:rereduce, tail)
+            end
+          else
+            red = yield(:reduce, head)
+            final_reduce(bt, [[], [red, *tail]])
+          end
         else
-          final_reduce(bt, leading_reductions, &bt.reduce)
+          final_reduce(bt, list, &bt.reduce)
         end
       end
 
@@ -860,7 +862,7 @@ module CouchRB
       #
       # OK, this makes one wish for pattern matching :)
       def complete_root(bt, *kps)
-        pp :complete_root => {:bt => bt, :kps => kps}
+        # pp :complete_root => {:bt => bt, :kps => kps}
         if kps.empty?
           return bt.root, bt
         else
@@ -950,11 +952,15 @@ module CouchRB
       #     false ->
       #         find_first_gteq(Bt, Tuple, Start, Mid, Key)
       #     end.
+      #
+      # This basically does a binary search through the tuple.
+      # It assumes the tuple is sorted.
+      # If the key is not found, it will return +to+.
       def find_first_gteq(tuple, from, to, key)
+        # pp :find_first_gteq => {:tuple => tuple, :from => from, :to => to, :key => key}
         return to if from == to
 
         mid = from + ((to - from) / 2)
-        # p :find_first_gteq => {:tuple => tuple, :from => from, :to => to, :key => key, :mid => mid}
         tuple_key, _ = element(mid, tuple)
 
         if tuple_key < key
@@ -1007,289 +1013,3 @@ module CouchRB
     end
   end
 end
-
-#original CouchDB btree tests
-
-BTree = CouchRB::Db::BTree
-
-require 'lib/couchrb/db/file'
-
-# test_keys(Btree, List) ->
-#     FoldFun =
-#     fun(Element, [HAcc|TAcc]) ->
-#             Element = HAcc, % must match
-#             {ok, TAcc}
-#         end,
-#     Sorted = lists:sort(List),
-#     {ok, []} = foldl(Btree, FoldFun, Sorted),
-#     {ok, []} = foldr(Btree, FoldFun, lists:reverse(Sorted)),
-#
-#     test_lookup(Btree, List).
-def test_keys(bt, list)
-  fold_fun = lambda{|element, (hacc, tacc), acc|
-    p :element => element, :hacc => hacc, :tacc => tacc, :acc => acc
-    fail("must match") unless element == hacc
-    [:ok, tacc]
-  }
-
-  sorted = list.sort
-  foldl_result = BTree.foldl(bt, sorted, &fold_fun)
-  fail("failed foldl") unless [:ok, []] == foldl_result
-
-  foldr_result = BTree.foldr(bt, sorted.reverse, &fold_fun)
-  fail("failed foldr") unless [:ok, []] == foldr_result
-end
-
-# removes each key one at a time from the btree
-#
-# test_remove(Btree, []) ->
-#     {ok, Btree};
-# test_remove(Btree, [{Key, _Value} | Rest]) ->
-#     {ok, Btree2} = add_remove(Btree,[], [Key]),
-#     test_remove(Btree2, Rest).
-def test_remove(bt, kvs)
-  kvs.each do |(key, value)|
-    bt = BTree.add_remove(bt, [], [key])
-  end
-
-  bt
-end
-
-# adds each key one at a time from the btree
-#
-# test_add(Btree, []) ->
-#     {ok, Btree};
-# test_add(Btree, [KeyValue | Rest]) ->
-#     {ok, Btree2} = add_remove(Btree, [KeyValue], []),
-#     test_add(Btree2, Rest).
-def test_add(bt, key_values)
-  key_values.each do |key_value|
-    bt = BTree.add_remove(bt, [key_value], [])
-  end
-  bt
-end
-
-# Makes sure each key value pair is found in the btree
-#
-# test_lookup(_Btree, []) ->
-#     ok;
-# test_lookup(Btree, [{Key, Value} | Rest]) ->
-#     [{ok,{Key, Value}}] = lookup(Btree, [Key]),
-#     {ok, []} = foldl(Btree, Key, fun({KeyIn, ValueIn}, []) ->
-#             KeyIn = Key,
-#             ValueIn = Value,
-#             {stop, []}
-#         end,
-#         []),
-#     {ok, []} = foldr(Btree, Key, fun({KeyIn, ValueIn}, []) ->
-#             KeyIn = Key,
-#             ValueIn = Value,
-#             {stop, []}
-#         end,
-#         []),
-#     test_lookup(Btree, Rest).
-def test_lookup(bt, key_values)
-  key_values.each do |(key, value)|
-    looked_up = BTree.lookup(bt, [key])
-
-    p :lookup => looked_up
-    fail("doesn't match") unless [[:ok, [key, value]]] == looked_up
-
-    foldl_result = BTree.foldl(bt, key, []){|key_in, value_in|
-      fail("key doesn't match") unless key_in == key
-      fail("value doesn't match") unless value_in == value
-      [:stop, []]
-    }
-    fail unless foldl_result == [:ok, []]
-
-    foldr_result = BTree.foldr(bt, key, []){|key_in, value_in|
-      fail("key doesn't match") unless key_in == key
-      fail("value doesn't match") unless value_in == value
-      [:stop, []]
-    }
-    fail unless foldr_result == [:ok, []]
-  end
-end
-
-# every_other(List) ->
-#     every_other(List, [], [], 1).
-# 
-# every_other([], AccA, AccB, _Flag) ->
-#     {lists:reverse(AccA), lists:reverse(AccB)};
-# every_other([H|T], AccA, AccB, 1) ->
-#     every_other(T, [H|AccA], AccB, 0);
-# every_other([H|T], AccA, AccB, 0) ->
-#     every_other(T, AccA, [H|AccB], 1).
-#
-# This is a wonderful demonstration of the difference of OO and functional :)
-def every_other(list)
-  left, right = [], []
-
-  list.each_with_index do |element, idx, *rest|
-    (idx % 2 == 0) ? (left << element) : (right << element)
-  end
-
-  return left, right
-end
-
-def test_btree(key_values = [])
-  require 'fileutils'
-  FileUtils.rm('./foo')
-
-  fd = CouchRB::Db::File.new('./foo', 'a+')
-  btree = BTree.open(nil, fd)
-  len = key_values.size
-
-  reduce = lambda{|type, kvs|
-    # p :reduce => {:type => type, :kvs => kvs}
-
-    case type
-    when :reduce
-      kvs.size
-    when :rereduce
-      kvs.reduce(0){|s,(k,v)| k ? (s + k) : s }
-    end
-  }
-  btree1 = BTree.set_options(btree, :reduce => reduce)
-
-  puts '', 'first dump in all the values in one go', ''
-  btree10 = BTree.add_remove(btree1, key_values, [])
-  # p :btree10 => btree10
-
-  # FIXME: this won't work :(((((
-  # get the leading reduction as we foldl/r and count of all from start to val
-  val = len / 3
-  #
-  #   require 'timeout'
-  #   Timeout.timeout(3){
-  #       BTree.foldl(btree10, val){|kvs, leading_reds, acc|
-  #       p :acc => acc, :kvs => kvs, :leading_reds => leading_reds
-  # #
-  #       count_to_start = val + acc - 1
-  #       final_reduced = BTree.final_reduce(btree10, leading_reds)
-  # #
-  #       fail("%p" % [{
-  #         :count_to_start => count_to_start,
-  #         :final_reduced => final_reduced
-  #       }]) unless count_to_start == final_reduced
-  # #
-  #       [:ok, acc + 1]
-  #     }
-  #   }
-
-  puts '', 'make sure all are in the tree', ''
-  test_keys(btree10, key_values)
-
-  puts '', 'remove everything', ''
-  btree20 = test_remove(btree10, key_values)
-
-  foldl_result = BTree.foldl(btree20, false){|_x, _acc|
-    p :_x => _x, :_acc => _acc
-    [:ok, true]
-  }
-  fail('foldl_result is not empty') unless foldl_result == [:ok, false]
-
-  # add everything back one at a time
-  btree30 = test_add(btree20, key_values)
-  fail 'no btree30' unless btree30
-  test_keys(btree30, key_values)
-
-  key_values_rev = key_values.reverse
-
-  # remove everything, in reverse order
-  btree40 = test_remove(btree30, key_values_rev)
-  fail 'no btree40' unless btree40
-
-  # make sure it's empty
-  foldl_result = BTree.foldl(btree40, false){|_x, _acc|
-    [:ok, true]
-  }
-  fail("wrong foldl") unless foldl_result == [:ok, false]
-
-  a, b = every_other(key_values)
-  fail 'no a' unless a
-  fail 'no b' unless b
-
-  # add everything back
-  btree50 = test_add(btree40, key_values)
-  fail 'no btree50' unless btree50
-
-  test_keys(btree50, key_values)
-
-  # remove half the values
-  btree60 = test_remove(btree50, a)
-  fail 'no btree60' unless btree60
-
-  # verify the remaining
-  test_keys(btree60, b)
-
-  # add a back
-  btree70 = test_add(btree60, a)
-  fail 'no btree70' unless btree70
-
-  # verify
-  test_keys(btree70, key_values)
-
-
-#     % remove half the values
-#     {ok, Btree60} = test_remove(Btree50, A),
-# 
-#     % verify the remaining
-#     ok = test_keys(Btree60, B),
-# 
-#     % add A back
-#     {ok, Btree70} = test_add(Btree60, A),
-# 
-#     % verify
-#     ok = test_keys(Btree70, KeyValues),
-# 
-#     % remove B
-#     {ok, Btree80} = test_remove(Btree70, B),
-# 
-#     % verify the remaining
-#     ok = test_keys(Btree80, A),
-#     
-#     {ok, Btree90} = test_remove(Btree80, A),
-#     
-#     EvenOdd = fun(V) when V rem 2 == 1 -> "odd"; (_) -> "even" end,
-#     
-#     EvenOddKVs = [{{EvenOdd(Key),Key}, 1} || {Key, _} <- KeyValues],
-# 
-#     {ok, Btree100} = test_add(Btree90, EvenOddKVs),
-#     GroupingFun = fun({K1, _},{K2,_}) -> K1 == K2 end,
-#     FoldFun = fun(GroupedKey, Unreduced, Acc) ->
-#             {ok, [{GroupedKey, final_reduce(Btree100, Unreduced)} | Acc]}
-#         end,
-#         
-#     Half = Len div 2,
-#     
-#     {ok, [{{"odd", _}, Half}, {{"even",_}, Half}]} =
-#         fold_reduce(Btree100, nil, nil, GroupingFun, FoldFun, []),
-#     
-#     {ok, [{{"even",_}, Half}, {{"odd", _}, Half}]} =
-#         fold_reduce(Btree100, rev, nil, nil, GroupingFun, FoldFun, []),
-#         
-#     {ok, [{{"even",_}, Half}]} =
-#         fold_reduce(Btree100, fwd, {"even", -1}, {"even", foo}, GroupingFun, FoldFun, []),
-#         
-#     {ok, [{{"even",_}, Half}]} =
-#         fold_reduce(Btree100, rev, {"even", foo}, {"even", -1}, GroupingFun, FoldFun, []),
-#         
-#     {ok, [{{"odd",_}, Half}]} =
-#         fold_reduce(Btree100, fwd, {"odd", -1}, {"odd", foo}, GroupingFun, FoldFun, []),
-#     
-#     {ok, [{{"odd",_}, Half}]} =
-#         fold_reduce(Btree100, rev, {"odd", foo}, {"odd", -1}, GroupingFun, FoldFun, []),
-#     
-#     {ok, [{{"odd", _}, Half}, {{"even",_}, Half}]} =
-#         fold_reduce(Btree100, {"even", -1}, {"odd", foo}, GroupingFun, FoldFun, []),
-#     
-#     ok = couch_file:close(Fd).
-end
-
-n = 10
-
-list = Array.new(n){|i| i }
-test_btree(list)
-test_btree(list.reverse)
-test_btree(list.sort_by{ rand })
