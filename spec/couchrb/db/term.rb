@@ -19,10 +19,9 @@ shared :serializer do
   end
 end
 
+ET = CouchRB::Db::Term
 
 describe CouchRB::Db::Term do
-  ET = CouchRB::Db::Term
-
   # Deserialize some objects that have equivalents in Ruby
   describe 'deserializing' do
     behaves_like :serializer
