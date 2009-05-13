@@ -255,12 +255,11 @@ module CouchRB
           elsif less(b, a)
             1
           else
-            op_order(op_a) <=> op_order(op_b)
+            op_order(op_a) < op_order(op_b) ? -1 : 1
           end
         }
 
         key_pointers, query_results, bt2 = modify_node(bt, root, actions, [])
-        # p :key_pointers => key_pointers, :query_results => query_results, :bt2 => bt2
         new_root, bt3 = complete_root(bt2, *key_pointers)
         bt4 = bt3.dup # seems like erlang does this
         bt4.root = new_root
@@ -304,10 +303,11 @@ module CouchRB
         fail 'no bt2' unless bt2
         # pp :result => result, :new_node_list => new_node_list, :query_output2 => query_output2, :bt2 => bt2
 
-        case new_node_list
-        when [] # no nodes remain
+        if new_node_list == []
+          # no nodes remain
           return [], query_output2, bt2
-        when node_list # nothing changed
+        elsif new_node_list == node_list
+          # nothing changed
           last_key, last_value = element(node_list.size, node_list)
           return [last_key, root_pointer_info], query_output2, bt2
         else
@@ -458,7 +458,7 @@ module CouchRB
       # erlang but we don't have pattern matching.
       # and then it's still recursive too...
       def modify_kvnode(bt, node_tuple, lower_bound, actions, result_node, query_output)
-        # pp :modify_kvnode => { :bt => bt, :node_tuple => node_tuple, :lower_bound => lower_bound, :actions => actions, :result_node => result_node, :query_output => query_output, }
+        # pp :modify_kvnode => { :node_tuple => node_tuple, :lower_bound => lower_bound, :actions => actions, :result_node => result_node, :query_output => query_output, }
 
         if actions.empty?
           # p [result_node, bounded_tuple_to_list(node_tuple, lower_bound, node_tuple.size, [])]
@@ -510,6 +510,8 @@ module CouchRB
               end
             else
               if less(key, action_key)
+                modify_kvnode(bt, node_tuple, n + 1, [[action_type, action_key, action_value], *rest_actions], [[key, value], *result_node], query_output)
+              else
                 case action_type
                 when :insert
                   # p 'action_key is equal to key, so insert'
@@ -526,8 +528,6 @@ module CouchRB
                 else
                   raise 'unknown action_type'
                 end
-              else
-                modify_kvnode(bt, node_tuple, n + 1, [[action_type, action_key, action_value], *rest_actions], [[key, value], *result_node], query_output)
               end
             end
           end
@@ -555,13 +555,17 @@ module CouchRB
       def write_node(bt, node_type, node_list)
         # pp :write_node => {:bt => bt, :node_type => node_type, :node_list => node_list}
         node_list_list = [node_list]
+        # p :node_list_list => node_list_list
 
         result_list = node_list_list.map{|a_node_list|
+          # p :node_type => node_type, :a_node_list => a_node_list
           pointer = bt.fd.append_term([node_type, a_node_list])
+          # p :pointer => pointer
           last_key, _ = *lists_last(a_node_list)
           [last_key, [pointer, reduce_node(bt, node_type, a_node_list)]]
         }
 
+        # p :result_list => result_list
         return result_list, bt
       end
 
@@ -598,16 +602,10 @@ module CouchRB
 
         case node_type
         when :kp_node
-          nodes = node_list.map{|(_k, (_p, red))|
-            # p :rereduce => {:_k => _k, :_p => _p, :red => red}
-            red
-          }
+          nodes = node_list.map{|(_k, (_p, red))| red }
           bt.reduce.call(:rereduce, nodes)
         when :kv_node
-          nodes = node_list.map{|(key, value)|
-            # p :reduce => {:key => key, :value => value}
-            [key, value]
-          }
+          nodes = node_list.map{|(key, value)| [key, value] }
           bt.reduce.call(:reduce, nodes)
         else
           raise 'invalid node_type: %p' % [node_type]
@@ -745,18 +743,6 @@ module CouchRB
             raise 'invalid dir: %p' % [dir]
           end
         end
-
-      #     case NodesToStream of
-      #     [] ->
-      #         {ok, Acc};
-      #     [{_Key, {Pointer, Red}} | Rest] ->
-      #         case stream_node(Bt, NewReds, {Pointer, Red}, StartKey, Dir, Fun, Acc) of
-      #         {ok, Acc2} ->
-      #             stream_kp_node(Bt, [Red | NewReds], Rest, Dir, Fun, Acc2);
-      #         {stop, Acc2} ->
-      #             {stop, Acc2}
-      #         end
-      #     end.
       end
 
       # stream_kv_node(Bt, Reds, KVs, StartKey, Dir, Fun, Acc) ->
@@ -871,6 +857,7 @@ module CouchRB
             return pointer_info, bt
           else
             result_key_pointers, bt2 = write_node(bt, :kp_node, kps)
+            # p :result_key_pointers => result_key_pointers
             complete_root(bt2, *result_key_pointers)
           end
         end

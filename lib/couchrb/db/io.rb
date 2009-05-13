@@ -29,8 +29,10 @@ module CouchRB
       #     {ok, Pos} = file:position(Fd, eof),
       #     {reply, {file:pwrite(Fd, Pos + Num - 1, <<0>>), Pos}, Fd};
       def expand(fd, num)
-        pos = fd.seek(-1, ::IO::SEEK_END)
+        fd.seek(-1, ::IO::SEEK_END)
+        pos = fd.pos
         fd.write("\0" * num)
+        pos
       end
 
       # handle_call(bytes, _From, Fd) ->
@@ -69,12 +71,6 @@ module CouchRB
         fd.write(bin2)
 
         fd.pos = pos
-
-        if fd.read(bin2.bytesize) != bin2
-          raise "cannot read from this pos"
-        else
-          pos
-        end
       ensure
         fd.sync
       end
@@ -154,7 +150,8 @@ module CouchRB
       #
       # FIXME: Term needs compression support
       def append_term(term)
-        # p :append_term => term
+        pp :append_term => term
+        # p caller
         append_binary(Term.dump(term))
       end
 
@@ -185,6 +182,7 @@ module CouchRB
       #     {ok, binary_to_term(Bin)}.
       def pread_term(pos)
         # p :pread_term => {:pos => pos}
+        # p caller
         # p caller
         bin = pread_binary(pos)
         # p :bin => bin

@@ -168,6 +168,7 @@ describe CouchRB::Db::BTree do
     end
 
     should 'dump all key_values in one go and make sure they stay there' do
+      puts
       @bt2 = BTree.add_remove(@bt1, @key_values.dup, [])
       test_keys(@bt2, @key_values.dup).should == true
     end
@@ -199,21 +200,18 @@ describe CouchRB::Db::BTree do
       foldr_result.should == [:ok, true]
     end
 
-    should 'remove everything at once' do
-      keys = @key_values.map{|k,v| k }
+    should 'remove everything' do
+      puts
+      @bt3 = test_remove(@bt2, @key_values.dup)
 
-      bt11 = BTree.add_remove(@bt2, [], @key_values.map{|k,v| k })
-
-      foldl_result = BTree.foldl(bt11, false){|_x, _acc|
+      foldl_result = BTree.foldl(@bt3, false){|_x, _acc|
         p :_x => _x, :_acc => _acc
         [:ok, true]
       }
-
       foldl_result.should == [:ok, false]
     end
   end
 end
-
 __END__
 
     should 'remove everything' do
