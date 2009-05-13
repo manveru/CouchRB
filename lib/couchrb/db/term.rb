@@ -43,6 +43,7 @@ module CouchRB
         78 => :new_cache_ext,
         97 => :small_integer_ext,
         98 => :integer_ext,
+        99 => :float_ext,
         100 => :atom_ext,
         101 => :reference_ext,
         102 => :port_ext,
@@ -84,16 +85,6 @@ module CouchRB
         return term if ok
       end
       alias walking next # don't wanna type self.next
-
-      def next_term
-        term_start = self.next
-
-        if term_start == 131
-          self.next
-        else
-          raise("No term starts here")
-        end
-      end
 
       # the maximum values for numeric
       MIN_INTEGER_SMALL = 0
@@ -177,6 +168,8 @@ module CouchRB
         if handler = TYPE_MAP[id]
           got = send(handler)
           return :ok, got
+        elsif id == 0
+          return
         else
           raise "No handler for %p" % [id]
         end
@@ -414,8 +407,16 @@ module CouchRB
       # FIXME: Whatever this is supposed to mean
       def small_big_ext
         length, sign = io.read(2).unpack('CC')
-        data = io.read(length).unpack('h*')[0].to_i(16)
-        sign == 0 ? data : -data
+
+        data = io.read(length).unpack('C*')
+        b = 256
+        sum = 0
+
+        data.each_with_index do |digit, index|
+          sum += (digit * (b ** index))
+        end
+
+        sign == 0 ? sum : -sum
       end
 
       # | 1   | 4      | 1    | Length
@@ -425,8 +426,16 @@ module CouchRB
       # field is an unsigned 4 byte integer.
       def large_big_ext
         length, sign = io.read(5).unpack('NC')
-        data = io.read(length).unpack('h*')[0].to_i(16)
-        sign == 0 ? data : -data
+
+        data = io.read(length).unpack('C*')
+        b = 256
+        sum = 0
+
+        data.each_with_index do |digit, index|
+          sum += (digit * (b ** index))
+        end
+
+        sign == 0 ? sum : -sum
       end
 
       # | 1   | 4    | 1     | 16   | 4     | 4       | N1     | N2       | N3      | N4  | N5
@@ -514,8 +523,11 @@ module CouchRB
       #
       # This term is used in minor version 0 of the external format; it has been
       # superseded by NEW_FLOAT_EXT .
+      #
+      # For some reason, erlang is still using this instead of NEW_FLOAT_EXT.
       def float_ext
-        raise("Unimplemented FLOAT_EXT")
+        raw = io.read(31)
+        raw.to_f # Yay! To whoever came up with that binary representation.
       end
 
       # The overall format of the term format is:
@@ -526,6 +538,7 @@ module CouchRB
       # | 1   | 1  | 4                | N
       # | 131 | 80 | UncompressedSize | Zlib-compressedData
       def term
+        walking
       end
 
       def read(n, format = 'C')

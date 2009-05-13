@@ -1,6 +1,44 @@
 require 'spec/helper'
 
 shared :serializer do
+  # The shelling out to erlang is very expensive, it would be better to talk
+  # with it over network.
+
+  TERM_TO_BINARY = <<-ERLANG.strip
+io:format("~n~n"),
+Bin = term_to_binary(%s),
+io:format("~p~n~n", [Bin]).
+  ERLANG
+
+  BINARY_TO_TERM = <<-ERLANG.strip
+io:format("~n~n"),
+Bin = binary_to_term(%s),
+io:format("~p~n~n", [Bin]).
+  ERLANG
+
+  def term_to_binary(term)
+    input = TERM_TO_BINARY % [term]
+    # puts input
+    output = `echo -e '#{input}' | erl`
+    puts output
+    out = []
+    output[/\n\n(.*)\n\n/m, 1].scan(/\d+/){|d| out << [d.to_i].pack('C') }
+    out
+  end
+
+  def binary_to_term(id, bytes)
+    binary = '<<' << [131, id, *bytes].join(',') << '>>'
+    input = BINARY_TO_TERM % [binary]
+    # puts input
+    output = `echo -e '#{input}' | erl`
+    # puts output
+    output[/\n\n(.*)\n\n/, 1].gsub(/\s+/, '')
+  end
+
+  def binary_to_erl_binary(binary)
+    '<<' << binary.scan(/./).map{|c| [c].pack('C') }.join(',') << '>>'
+  end
+
   def parse(prefix, suffix)
     id = [prefix.to_s(16)].pack('H*')
     binary = "#{id}#{suffix}"
@@ -176,6 +214,51 @@ describe CouchRB::Db::Term do
       value = [[100, nil], [200, nil], [300, nil]]
       roundtrip(value).should == value
       roundtrip(roundtrip(value)).should == value
+    end
+  end
+
+  describe 'we can parse original erlang terms' do
+    behaves_like :serializer
+
+    def et_bounce(term)
+      bin = term_to_binary(term).join
+      p bin
+      ET.new(StringIO.new(bin)).next
+    end
+
+    should 'handle Integer (small)' do
+      value = 255
+      et_bounce(value).should == value
+    end
+
+    should 'handle Big (small)' do
+      value = 1078199889
+      et_bounce(value).should == value
+      et_bounce(-value).should == -value
+    end
+  end
+end
+
+__END__
+  describe 'roundtrip over erlang' do
+    behaves_like :serializer
+
+    should 'serialize a term to binary' do
+      bin = term_to_binary('1.23456')
+      bin[2..-1].join.should =~ /^1\.23456/
+    end
+
+    should 'deserialize binary to a term' do
+      binary = ('%.20f' % 1.23456).unpack('C*')
+      binary << 0 until binary.size == 31
+      binary_to_term(99, binary).should == '1.23456'
+    end
+
+    should 'handle Integer (small)' do
+      value = 255
+      binary = dump(value)
+      binary.should == [97, [value].pack('C')]
+      term_to_binary('255').should == binary
     end
   end
 end
