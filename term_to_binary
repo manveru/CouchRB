@@ -1,0 +1,20 @@
+#!/usr/bin/env escript
+%% -*- erlang -*-
+%%! -smp enable -sname term_to_binary -mnesia debug verbose
+main([String]) ->
+  try
+    Term = eval(String),
+    io:format("Binary ~p\n", [Bin]),
+    Term = term_to_binary(Bin),
+    io:format("Binary ~p = ~p\n", [Bin,Term])
+  catch
+    _:_ ->
+      usage()
+  end;
+
+main(_) ->
+  usage().
+
+usage() ->
+  io:format("usage: term_to_binary term\n"),
+  halt(1).

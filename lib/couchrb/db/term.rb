@@ -96,6 +96,10 @@ module CouchRB
       MIN_BIG_LARGE     = MAX_BIG_SMALL     + 1
       MAX_BIG_LARGE     = ((1 << 8160) - 1)
 
+      def self.dump_term(obj)
+        "\203#{dump(obj)}"
+      end
+
       def self.dump(obj)
         case obj
         when Integer
@@ -105,24 +109,40 @@ module CouchRB
           when (MIN_INTEGER_SMALL..MAX_INTEGER_SMALL)
             binary_join(97, [obj].pack('C'))
           when (MIN_INTEGER_LARGE..MAX_INTEGER_LARGE)
-            binary_join(98, [obj].pack('l'))
+            binary_join(98, [obj].pack('N'))
           when (MIN_BIG_SMALL..MAX_BIG_SMALL)
-            sign   = [abs == obj ? 0 : 1].pack('C')
-            data   = [abs.to_s(16)      ].pack('h*')
-            length = [data.bytesize     ].pack('C')
+            chunks = []
+            left = abs
 
-            binary_join(110, length, sign, data)
+            until left == 0
+              left, remainder = left.divmod(256)
+              chunks << remainder
+            end
+
+            sign = [obj == abs ? 0 : 1].pack('C')
+            data = chunks.pack('C*')
+            len = [data.bytesize].pack('C')
+
+            binary_join(110, len, sign, *data)
           when (MIN_BIG_LARGE..MAX_BIG_LARGE)
-            sign   = [abs == obj ? 0 : 1].pack('C')
-            data   = [abs.to_s(16)      ].pack('h*')
-            length = [data.bytesize     ].pack('N')
+            chunks = []
+            left = abs
 
-            binary_join(111, length, sign, data)
+            until left == 0
+              left, remainder = left.divmod(256)
+              chunks << remainder
+            end
+
+            sign = [obj == abs ? 0 : 1].pack('C')
+            data = chunks.pack('C*')
+            len = [data.bytesize].pack('N')
+
+            binary_join(111, len, sign, *data)
           else
             raise("Cannot serialize numbers that large: %p" % obj)
           end
         when Float
-          binary_join(70, [obj].pack('G'))
+          binary_join(99, ('%.20e' % [obj]).ljust(31, "\0"))
         when Symbol # We use that as our Atom
           value  = obj.to_s
           length = [value.bytesize].pack('n')
@@ -142,11 +162,12 @@ module CouchRB
           end
         when nil
           binary_join(106)
-        when List, Array
+        when List
           binary_elements = []
           obj.each{|l| binary_elements << dump(l) }
+          binary_elements << binary_join(106)
 
-          size = binary_elements.size
+          size = (binary_elements.size - 1)
           binary_length = [size].pack('N')
 
           binary_join(108, binary_length, *binary_elements)
@@ -159,7 +180,8 @@ module CouchRB
 
       def self.binary_join(id, *rest)
         binary_id = [id].pack('C')
-        [binary_id, *rest].join
+        binary = [binary_id, *rest].join
+        binary
       end
 
       def step
@@ -167,6 +189,7 @@ module CouchRB
 
         if handler = TYPE_MAP[id]
           got = send(handler)
+          # p handler => got
           return :ok, got
         elsif id == 0
           return
@@ -212,8 +235,8 @@ module CouchRB
       # last byte in the data field, counting from the most
       # significant bit towards the least significant.
       def bit_binary_ext
-        length, bits = io.read(5).unpack('NC')
-        data = io.read(length)
+        length, bits = read(5, 'NC')
+        data = read(length, nil)
       end
 
       # | 1  | 1     | 2      | Length
@@ -225,8 +248,8 @@ module CouchRB
       # The atom cache is currently only used between real Erlang
       # nodes (not between Erlang nodes and C or Java nodes).
       def new_cache_ext
-        index, length = io.read(3).unpack('Cn')
-        atom_name = io.read(length)
+        index, length = read(3, 'Cn')
+        atom_name = read(length, nil)
 
         [index, atom_name]
       end
@@ -244,7 +267,7 @@ module CouchRB
       #
       # Signed 32 bit integer in big-endian format.
       def integer_ext
-        read(4, 'l')
+        read(4, 'N')
       end
 
       # | 1   | 2      | Length
@@ -265,7 +288,7 @@ module CouchRB
       # Note: We simply use Symbol here, as it maps well with the Ruby symbol
       def atom_ext
         length = read(2, 'n')
-        io.read(length).to_sym
+        read(length, nil).to_sym
       end
 
       # | 1   | N    | 4  | 1
@@ -283,7 +306,7 @@ module CouchRB
       # See NEW_REFERENCE_EXT.
       def reference_ext
         node = walking
-        id, creation = io.read(5).unpack('NC')
+        id, creation = read(5, 'NC')
 
         Reference.new(node, id, creation)
       end
@@ -300,7 +323,7 @@ module CouchRB
       # internals?
       def port_ext
         node = walking
-        id, creation = io.read(5).unpack('NC')
+        id, creation = read(5, 'NC')
 
         [node, id, creation]
       end
@@ -314,7 +337,7 @@ module CouchRB
       # In ID, only 15 bits are significant; the rest should be 0.
       def pid_ext
         node = walking
-        id, serial, creation = io.read(9).unpack('NNC')
+        id, serial, creation = read(9, 'NNC')
         PID.new(node, id, serial, creation)
       end
 
@@ -327,7 +350,7 @@ module CouchRB
       def small_tuple_ext
         arity = read(1)
         elements = Array.new(arity){ walking }
-        Tuple.new(elements)
+        Tuple[*elements]
       end
 
       def nil_ext
@@ -349,7 +372,7 @@ module CouchRB
           break if io.eof?
           elements << walking
         }
-        Tuple.new(elements)
+        Tuple[*elements]
       end
 
       # | 1   | 2      | Length
@@ -364,7 +387,7 @@ module CouchRB
       # than 65535 elements are encoded as LIST_EXT.
       def string_ext
         length = read(2, 'n')
-        chars  = io.read(length)
+        chars  = read(length, nil)
       end
 
       # | 1   | 4      | Â        | Â 
@@ -375,10 +398,14 @@ module CouchRB
       # Tail is the final tail of the list; it is NIL_EXT for a
       # proper list, but may be anything type if the list is
       # improper (for instance [a|b]).
+      #
+      # We don't encounter improper lists in CouchDB... i haven't even got the
+      # slightest clue what improper might mean.
       def list_ext
         length = read(4, 'N')
         list = Array.new(length){ walking }
-        list
+        list.pop if list.last == nil
+        List[*list]
       end
 
       # | 1   | 4      | Length
@@ -389,7 +416,7 @@ module CouchRB
       # The Length length field is an unsigned 4 byte integer (big endian).
       def binary_ext
         length = read(4, 'N')
-        data   = io.read(length)
+        data   = read(length, nil)
       end
 
       # | 1   | 1      | 1    | Length
@@ -406,9 +433,9 @@ module CouchRB
       #
       # FIXME: Whatever this is supposed to mean
       def small_big_ext
-        length, sign = io.read(2).unpack('CC')
+        length, sign = read(2, 'CC')
 
-        data = io.read(length).unpack('C*')
+        data = read(length, 'C*')
         b = 256
         sum = 0
 
@@ -425,9 +452,9 @@ module CouchRB
       # Same as SMALL_BIG_EXT with the difference that the length
       # field is an unsigned 4 byte integer.
       def large_big_ext
-        length, sign = io.read(5).unpack('NC')
+        length, sign = read(5, 'NC')
 
-        data = io.read(length).unpack('C*')
+        data = read(length, 'C*')
         b = 256
         sum = 0
 
@@ -475,7 +502,7 @@ module CouchRB
       #       this information other than write it back again.
       def new_fun_ext
         size = read(4, 'N')
-        NewFunction.new(io.read(size))
+        NewFunction.new(read(size, nil))
       end
 
       # | 1   | N1     | N2       | N3
@@ -525,9 +552,9 @@ module CouchRB
       # superseded by NEW_FLOAT_EXT .
       #
       # For some reason, erlang is still using this instead of NEW_FLOAT_EXT.
+      # Yay! To whoever came up with that binary representation.
       def float_ext
-        raw = io.read(31)
-        raw.to_f # Yay! To whoever came up with that binary representation.
+        read(31, nil).to_f
       end
 
       # The overall format of the term format is:
@@ -542,7 +569,10 @@ module CouchRB
       end
 
       def read(n, format = 'C')
-        io.read(n).unpack(format)[0]
+        string = io.read(n)
+        return string unless format
+        binary = string.unpack(format)
+        binary.size == 1 ? binary[0] : binary
       end
 
       def log(msg, hash)
@@ -623,12 +653,10 @@ module CouchRB
         include PrettyTerm
       end
 
-      class Tuple < Struct.new(:elements);
-        include Comparable, Enumerable, ArrayLike
+      class Tuple < ::Array
       end
 
-      class List < Struct.new(:elements)
-        include Comparable, Enumerable, ArrayLike
+      class List < ::Array
       end
     end
   end

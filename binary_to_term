@@ -1,0 +1,25 @@
+#!/usr/bin/env escript
+%% -*- erlang -*-
+%%! -sname binary_to_term
+main([String]) ->
+  try
+    convert(String)
+  catch
+    _:_ ->
+      usage()
+  end;
+
+main(_) ->
+  io:setopts([{binary, true}]),
+  {ok, String} = io:read(""),
+  convert(String).
+
+usage() ->
+  io:format("usage: binary_to_term binary\n"),
+  halt(1).
+
+convert(Bin) ->
+  % io:format("~p~n", [Bin]),
+  % Bin = list_to_binary(String),
+  Term = binary_to_term(<<Bin/binary>>),
+  io:format("~p\n", [Term]).

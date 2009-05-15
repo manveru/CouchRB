@@ -1,52 +1,59 @@
 require 'spec/helper'
+require 'open3'
 
-shared :serializer do
-  # The shelling out to erlang is very expensive, it would be better to talk
-  # with it over network.
+ET = CouchRB::Db::Term
 
-  TERM_TO_BINARY = <<-ERLANG.strip
+TERM_TO_BINARY = <<-ERLANG.strip
 io:format("~n~n"),
 Bin = term_to_binary(%s),
 io:format("~p~n~n", [Bin]).
-  ERLANG
+ERLANG
 
-  BINARY_TO_TERM = <<-ERLANG.strip
-io:format("~n~n"),
-Bin = binary_to_term(%s),
-io:format("~p~n~n", [Bin]).
-  ERLANG
+shared :serializer do
+  # I built small scripts that help us passing data from and to escript, that's
+  # much better than piping into erl.
+  #
+  # Still struggling with the lack of an easy-to-use eval that would let us
+  # convert terms to binary, but that's not as important since what we need to
+  # do is parse and generate binary term format.
+  # For now we still pipe into erl for that.
+  def pipe_binary_to_term(binary)
+    Open3.popen3('binary_to_term'){|sin,sout,serr|
+      sin.print(%(<<"#{binary}">>.\n))
+      sout.read.chomp.scan(/\S/).join
+    }
+  end
 
+  # this script doesn't work as we would like it to, figure out how to create
+  # erlang terms from a string (erl_eval or erl_parse... but how?).
+  def pipe_term_to_binary(term)
+    Open3.popen3('term_to_binary'){|sin,sout,serr|
+      sin.print(%(<<"#{binary}">>.\n))
+      sout.read.chomp
+    }
+  end
+
+  # The shelling out to erlang is very expensive, it would be better to talk
+  # with it over network.
   def term_to_binary(term)
     input = TERM_TO_BINARY % [term]
     # puts input
     output = `echo -e '#{input}' | erl`
-    puts output
+    # puts output
     out = []
     output[/\n\n(.*)\n\n/m, 1].scan(/\d+/){|d| out << [d.to_i].pack('C') }
     out
   end
 
-  def binary_to_term(id, bytes)
-    binary = '<<' << [131, id, *bytes].join(',') << '>>'
-    input = BINARY_TO_TERM % [binary]
-    # puts input
-    output = `echo -e '#{input}' | erl`
-    # puts output
-    output[/\n\n(.*)\n\n/, 1].gsub(/\s+/, '')
-  end
-
-  def binary_to_erl_binary(binary)
-    '<<' << binary.scan(/./).map{|c| [c].pack('C') }.join(',') << '>>'
-  end
-
+=begin
   def parse(prefix, suffix)
     id = [prefix.to_s(16)].pack('H*')
     binary = "#{id}#{suffix}"
-    CouchRB::Db::Term.new(StringIO.new(binary)).next
+    ET.new(StringIO.new(binary)).next
   end
 
   def dump(obj)
-    binary = CouchRB::Db::Term.dump(obj)
+    binary = ET.dump(obj)
     id = binary[0,1].unpack('H*')[0].to_i(16)
     rest = binary[1..-1]
     [id, rest]
@@ -55,210 +62,164 @@ io:format("~p~n~n", [Bin]).
   def roundtrip(obj)
     parse(*dump(obj))
   end
+=end
 end
 
-ET = CouchRB::Db::Term
-
 describe CouchRB::Db::Term do
-  # Deserialize some objects that have equivalents in Ruby
   describe 'deserializing' do
     behaves_like :serializer
 
-    should 'handle cached atom' do
-      value = 12
-      atom = parse(67, [value].pack('C'))
-      atom.should == value
+    def check(term, expected)
+      binary = term_to_binary(term).join
+      parsed = ET.new(StringIO.new(binary)).next
+      parsed.should == expected
     end
 
-    should 'handle Float (new)' do
-      value = 123123.123123
-      float = parse(70, [value].pack('G'))
-      float.should == value
+    # TODO
+    # CACHED_ATOM_EXT
+    # NEW_FLOAT_EXT
+    # BIT_BINARY_EXT
+    # NEW_CACHE_EXT
+
+    should 'parse SMALL_INTEGER_EXT' do
+      check 123, 123
     end
 
-    # should 'handle Bit Binary' do
-    #   parse(77, 'something').should.
-    #     flunk("Haven't got a real-world example yet")
-    # end
-
-    # should 'handle new cache' do
-    #   parse(78, "something").should.
-    #     flunk("Used only Erlang internally")
-    # end
-
-    should 'handle Integer (small)' do
-      value = 255
-      int = parse(97, [value].pack('C'))
-      int.should == value
+    should 'parse INTEGER_EXT' do
+      values = [1 << 8, 1 << 15, 1 << 30]
+      values.each{|value| check(value, value) }
     end
 
-    should 'handle Integer (large)' do
-      value = 1078199889
-      int = parse(98, [value].pack('l'))
-      int.should == value
+    should 'parse FLOAT_EXT' do
+      check 1.23456, 1.23456
     end
 
-    should 'handle Atom' do
-      value = 'db_header'
-      length = [value.bytesize].pack('n')
-      atom = parse(100, "#{length}#{value}")
-      atom.should == value.to_sym
+    should 'parse ATOM_EXT' do
+      check 'kv_node', :kv_node
     end
 
-    # should 'handle Reference' do
-    #   parse(101, 'something').should.
-    #     flunk("Haven't got a real-world example yet")
-    # end
+    # TODO
+    # REFERENCE_EXT
+    # PORT_EXT
+    # PID_EXT
 
-    # should 'handle Port' do
-    #   parse(102, "something").should.
-    #     flunk("Used only Erlang internally")
-    # end
+    should 'parse SMALL_TUPLE_EXT' do
+      check '{a,b,c}', ET::Tuple[:a, :b, :c]
+    end
 
-    # should 'handle PID' do
-    #   parse(103, "something").should.
-    #     flunk("Used only Erlang internally")
-    # end
+    should 'parse LARGE_TUPLE_EXT' do
+      values = [0,1,2,3,4,5,6,7,8,9] * 30
+      term = '{' << values.join(',') << '}'
+      check term, ET::Tuple[*values]
+    end
+
+    should 'parse NIL_EXT' do
+      check '[]', nil
+    end
+
+    # TODO
+    # STRING_EXT
+
+    should 'parse LIST_EXT' do
+      check '[a,b,c]', ET::List[:a, :b, :c]
+    end
+
+    # TODO
+    # BINARY_EXT
+
+    should 'parse SMALL_BIG_EXT' do
+      values = [1 << 32, 1 << 2039]
+      values.each{|value| check(value, value) }
+    end
+
+    should 'parse LARGE_BIG_EXT' do
+      values = [1 << 2040, 1 << 8159]
+      values.each{|value| check(value, value) }
+    end
+
+    # TODO
+    # NEW_FUN_EXT
+    # EXPORT_EXT
+    # NEW_REFERENCE_EXT
+    # FUN_EXT
+    # TERM
   end
 
-  # Serializing some simple objects that have equivalents in
-  # Erlang
   describe 'serializing' do
     behaves_like :serializer
 
-    should 'handle Float' do
-      value = 123123.123123
-      binary = dump(value)
-      binary.should == [70, [value].pack('G')]
+    def check(value, expected)
+      pipe_binary_to_term(ET.dump_term(value)).
+        should == expected
     end
 
-    should 'handle Integer (small)' do
-      value = 255
-      binary = dump(value)
-      binary.should == [97, [value].pack('C')]
+    # TODO
+    # CACHED_ATOM_EXT
+    # NEW_FLOAT_EXT
+    # BIT_BINARY_EXT
+    # NEW_CACHE_EXT
+
+    should 'dump as SMALL_INTEGER_EXT' do
+      check 123, '123'
     end
 
-    should 'handle Integer (large)' do
-      value = 1078199889
-      binary = dump(value)
-      binary.should == [98, [value].pack('l')]
-    end
-  end
-
-  # This seems most important
-  describe 'roundtrip' do
-    behaves_like :serializer
-
-    should 'handle Float' do
-      value = 123123.123123
-      roundtrip(value).should == value
+    should 'dump as INTEGER_EXT' do
+      values = [1 << 8, 1 << 15, 1 << 30]
+      values.each{|value| check(value, value.to_s) }
     end
 
-    should 'handle positive Integer (small)' do
-      value = 255
-      roundtrip(value).should == value
+    should 'dump as FLOAT_EXT' do
+      check 1.23456, '1.23456'
     end
 
-    should 'handle positive Integer (large)' do
-      value = ((1 << 31) - 1)
-      roundtrip(value).should == value
+    should 'dump as ATOM_EXT' do
+      check :kv_node, 'kv_node'
     end
 
-    should 'handle negative Integer (large)' do
-      value = -((1 << 31) - 1)
-      roundtrip(value).should == value
+    # TODO
+    # REFERENCE_EXT
+    # PORT_EXT
+    # PID_EXT
+
+    should 'dump as SMALL_TUPLE_EXT' do
+      check ET::Tuple[1,2,3], '{1,2,3}'
     end
 
-    should 'handle positive Big (small)' do
-      value = ((1 << 2040) - 1)
-      roundtrip(value).should == value
+    should 'dump as LARGE_TUPLE_EXT' do
+      values = [0,1,2,3,4,5,6,7,8,9] * 30
+      expected = '{' << values.join(',') << '}'
+      check ET::Tuple[*values], expected
     end
 
-    should 'handle negative Big (small)' do
-      value = -((1 << 2040) - 1)
-      roundtrip(value).should == value
+    should 'dump as NIL_EXT' do
+      check nil, '[]'
     end
 
-    should 'handle positive Big (large)' do
-      value = ((1 << 8160) - 1)
-      roundtrip(value).should == value
+    # TODO
+    # STRING_EXT
+
+    should 'dump as LIST_EXT' do
+      check ET::List[1,2,3], '[1,2,3]'
     end
 
-    should 'handle negative Big (large)' do
-      value = -((1 << 8160) - 1)
-      roundtrip(value).should == value
+    # TODO
+    # BINARY_EXT
+
+    should 'dump as SMALL_BIG_EXT' do
+      values = [1 << 32, 1 << 2039]
+      values.each{|value| check(value, value.to_s) }
     end
 
-    should 'handle Atom' do
-      value = :db_header
-      roundtrip(value).should == value
+    should 'dump as LARGE_BIG_EXT' do
+      values = [1 << 2040, 1 << 8159]
+      values.each{|value| check(value, value.to_s) }
     end
 
-    should 'handle Tuple (small)' do
-      value = ET::Tuple.new([100, 200, 300])
-      roundtrip(value).should == value
-    end
-
-    should 'handle Tuple (small)' do
-      value = ET::Tuple.new([100, 200, 300] * 200)
-      roundtrip(value).should == value
-    end
-
-    should 'handle List' do
-      value = [100, 200, 300]
-      roundtrip(value).should == value
-      roundtrip(roundtrip(value)).should == value
-    end
-
-    should 'handle List with nil values' do
-      value = [[100, nil], [200, nil], [300, nil]]
-      roundtrip(value).should == value
-      roundtrip(roundtrip(value)).should == value
-    end
-  end
-
-  describe 'we can parse original erlang terms' do
-    behaves_like :serializer
-
-    def et_bounce(term)
-      bin = term_to_binary(term).join
-      p bin
-      ET.new(StringIO.new(bin)).next
-    end
-
-    should 'handle Integer (small)' do
-      value = 255
-      et_bounce(value).should == value
-    end
-
-    should 'handle Big (small)' do
-      value = 1078199889
-      et_bounce(value).should == value
-      et_bounce(-value).should == -value
-    end
-  end
-end
-
-__END__
-  describe 'roundtrip over erlang' do
-    behaves_like :serializer
-
-    should 'serialize a term to binary' do
-      bin = term_to_binary('1.23456')
-      bin[2..-1].join.should =~ /^1\.23456/
-    end
-
-    should 'deserialize binary to a term' do
-      binary = ('%.20f' % 1.23456).unpack('C*')
-      binary << 0 until binary.size == 31
-      binary_to_term(99, binary).should == '1.23456'
-    end
-
-    should 'handle Integer (small)' do
-      value = 255
-      binary = dump(value)
-      binary.should == [97, [value].pack('C')]
-      term_to_binary('255').should == binary
-    end
+    # TODO
+    # NEW_FUN_EXT
+    # EXPORT_EXT
+    # NEW_REFERENCE_EXT
+    # FUN_EXT
+    # TERM
   end
 end
