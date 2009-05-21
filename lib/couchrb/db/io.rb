@@ -181,7 +181,7 @@ module CouchRB
       #     {ok, Bin} = pread_binary(Fd, Pos),
       #     {ok, binary_to_term(Bin)}.
       def pread_term(pos)
-        # p :pread_term => {:pos => pos}
+        p :pread_term => {:pos => pos}
         # p caller
         # p caller
         bin = pread_binary(pos)

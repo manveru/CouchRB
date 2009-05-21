@@ -118,6 +118,7 @@ shared :test_helpers do
 end
 
 BTree = CouchRB::Db::BTree
+Terms = CouchRB::Db::Terms
 
 describe CouchRB::Db::BTree do
   should 'have op_order' do
@@ -143,14 +144,14 @@ describe CouchRB::Db::BTree do
 
   describe 'original tests' do
     behaves_like :test_helpers
-    @key_values = []
-    3.times{|n| @key_values << [n + 1, rand] }
+    @key_values = Terms::List[]
+    3.times{|n| @key_values << Terms::Tuple[n + 1, rand] }
 
     should 'create a new BTree' do
       FileUtils.rm('./foo')
       fd = CouchRB::Db::File.new('./foo', 'a+')
-      @bt0 = BTree.open(nil, fd)
-      @bt0.fd.should == fd
+      @btree = BTree.open(nil, fd)
+      @btree.fd.should == fd
     end
 
     should 'set a reduce function' do
@@ -163,37 +164,40 @@ describe CouchRB::Db::BTree do
         end
       }
 
-      @bt1 = BTree.set_options(@bt0, :reduce => reduce)
-      @bt1.reduce.should == reduce
+      @btree1 = BTree.set_options(@btree, :reduce => reduce)
+      @btree1.reduce.should == reduce
     end
 
     should 'dump all key_values in one go and make sure they stay there' do
       puts
-      @bt2 = BTree.add_remove(@bt1, @key_values.dup, [])
-      test_keys(@bt2, @key_values.dup).should == true
+      @btree10 = BTree.add_remove(@btree1, @key_values.dup, [])
+      @btree10.root.should.not == @btree1.root
     end
 
     should 'get the leading reduction as we foldl' do
       len = @key_values.size
       val = len / 3
 
-      foldl_result = BTree.foldl(@bt2, 0, val){|_x, leading_reds, acc|
+      foldl_result = BTree.foldl(@btree10, 0, val){|_x, leading_reds, acc|
         # p :_x => _x, :leading_reds => leading_reds, :acc => acc
         count_to_start = val + acc - 1
-        count_to_start.should == BTree.final_reduce(@bt2, leading_reds)
+        count_to_start.should == BTree.final_reduce(@btree10, leading_reds)
         [:ok, acc + 1]
       }
 
       foldl_result.first.should == :ok
     end
+  end
+end
+__END__
 
     should 'get leading reduction as we foldr' do
       len = @key_values.size
       val = len / 3
 
-      foldr_result = BTree.foldr(@bt2, 0, val){|_x, leading_reds, acc|
+      foldr_result = BTree.foldr(@btree10, 0, val){|_x, leading_reds, acc|
         count_to_end = len - val
-        count_to_end.should == BTree.final_reduce(@bt2, leading_reds)
+        count_to_end.should == BTree.final_reduce(@btree10, leading_reds)
         [:stop, true] # change acc to true
       }
 
@@ -202,9 +206,9 @@ describe CouchRB::Db::BTree do
 
     should 'remove everything' do
       puts
-      @bt3 = test_remove(@bt2, @key_values.dup)
+      @btree20 = test_remove(@btree10, @key_values.dup)
 
-      foldl_result = BTree.foldl(@bt3, false){|_x, _acc|
+      foldl_result = BTree.foldl(@btree20, false){|_x, _acc|
         p :_x => _x, :_acc => _acc
         [:ok, true]
       }

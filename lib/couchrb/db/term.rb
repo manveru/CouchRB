@@ -1,5 +1,22 @@
 module CouchRB
   module Db
+    # Classes to hold Erlang structures so we don't lose them
+    module Terms
+      Export       = Struct.new(:module, :function, :arity)
+      NewFunction  = Struct.new(:binary)
+      NewReference = Struct.new(:length, :node, :creation, :n_prime)
+      PID          = Struct.new(:node, :id, :serial, :creation)
+      Reference    = Struct.new(:node, :id, :creation)
+
+      class List < Array
+        def inspect; "List[#{super}]" end
+      end
+
+      class Tuple < Array
+        def inspect; "Tuple[#{super}]" end
+      end
+    end
+
     # External Term Format
     #
     # The external term format is mainly used in the distribution mechanism of
@@ -36,6 +53,8 @@ module CouchRB
     # tell us expclicitly, and thank god that CouchDB doesn't use the compressed
     # serialization (guess for performance reasons?).
     class Term
+      include Terms
+
       TYPE_MAP = {
         67 => :cached_atom_ext,
         70 => :new_float_ext,
@@ -162,7 +181,7 @@ module CouchRB
           end
         when nil
           binary_join(106)
-        when List
+        when List, Array
           binary_elements = []
           obj.each{|l| binary_elements << dump(l) }
           binary_elements << binary_join(106)
@@ -606,58 +625,7 @@ module CouchRB
         end
       end
 
-      module PrettyTerm
-        def inspect
-          old = super
-          full_name = self.class.name
-          name = full_name.split('::').last
-          old.sub("struct #{full_name}", name)
-        end
-
-        def pretty_print(q)
-          name = self.class.name.split('::').last
-
-          q.group(1, "#<#{name}", '>') {
-            q.seplist(self.class.members, lambda { q.text "," }) {|member|
-            q.breakable
-            q.text member.to_s
-            q.text '='
-            q.group(1) {
-              q.breakable ''
-              q.pp self[member]
-            }
-          }
-          }
-        end
-
-        def pretty_print_cycle(q)
-          q.text sprintf("#<struct %s:...>", PP.mcall(self, Kernel, :class).name)
-        end
-      end
-
-      # Classes to hold Erlang structures so we don't lose them
-
-      class Export < Struct.new(:module, :function, :arity)
-        include PrettyTerm
-      end
-      class NewFunction < Struct.new(:binary)
-        include PrettyTerm
-      end
-      class NewReference < Struct.new(:length, :node, :creation, :n_prime)
-        include PrettyTerm
-      end
-      class PID < Struct.new(:node, :id, :serial, :creation)
-        include PrettyTerm
-      end
-      class Reference < Struct.new(:node, :id, :creation)
-        include PrettyTerm
-      end
-
-      class Tuple < ::Array
-      end
-
-      class List < ::Array
-      end
     end
+
   end
 end

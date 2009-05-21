@@ -1,4 +1,4 @@
-require 'pp'
+require 'couchrb/db/term'
 
 module CouchRB
   module Db
@@ -7,6 +7,8 @@ module CouchRB
     # around all the time...
     # Might be easier to refactor that to object oriented style once done.
     module BTreeFunctions
+      include Terms
+
       # % pass in 'nil' for State if a new Btree.
       #   open(State, Fd) ->
       # {ok, #btree{root=State, fd=Fd}}.
@@ -75,7 +77,7 @@ module CouchRB
             raise 'unknown node_type'
           end
         else
-          keys.map{|key| [key, :not_found] }
+          keys.map{|key| Tuple[key, :not_found] }
         end
       end
 
@@ -206,10 +208,10 @@ module CouchRB
       # add_remove(Bt, InsertKeyValues, RemoveKeys) ->
       #     {ok, [], Bt2} = query_modify(Bt, [], InsertKeyValues, RemoveKeys),
       #     {ok, Bt2}.
-      def add_remove(bt, insert_key_values, remove_keys = [])
+      def add_remove(bt, insert_key_values, remove_keys = List[])
         # pp :add_remove => {:bt => bt, :insert_key_values => insert_key_values, :remove_keys => remove_keys}
-        left, bt2 = query_modify(bt, [], insert_key_values, remove_keys)
-        fail "left is not []" unless left == []
+        left, bt2 = query_modify(bt, List[], insert_key_values, remove_keys)
+        fail "left is not []" unless left == List[]
         bt2
       end
 
@@ -244,9 +246,9 @@ module CouchRB
         # pp :query_modify => {:bt => bt, :lookup_keys => lookup_keys, :insert_values => insert_values, :remove_keys => remove_keys}
         root = bt.root # FIXME: is that really what it should do?
 
-        insert_actions = insert_values.map{|key_value| [:insert, *key_value] }
-        remove_actions = remove_keys.map{|key|         [:remove, key, nil  ] }
-        fetch_actions  = lookup_keys.map{|key|         [:fetch,  key, nil  ] }
+        insert_actions = insert_values.map{|key_value| Tuple[:insert, *key_value] }
+        remove_actions = remove_keys.map{|key|         Tuple[:remove, key, nil  ] }
+        fetch_actions  = lookup_keys.map{|key|         Tuple[:fetch,  key, nil  ] }
 
         unsorted_actions = (insert_actions + remove_actions + fetch_actions)
         actions = unsorted_actions.sort{|(op_a, a, _), (op_b, b, _)|
@@ -559,7 +561,7 @@ module CouchRB
 
         result_list = node_list_list.map{|a_node_list|
           # p :node_type => node_type, :a_node_list => a_node_list
-          pointer = bt.fd.append_term([node_type, a_node_list])
+          pointer = bt.fd.append_term(Tuple[node_type, a_node_list])
           # p :pointer => pointer
           last_key, _ = *lists_last(a_node_list)
           [last_key, [pointer, reduce_node(bt, node_type, a_node_list)]]
@@ -615,7 +617,7 @@ module CouchRB
       # +dir+ is the direction (:fwd || :rev)
       def stream_node(bt, reds, pointer_info, acc, dir, start_key = nil, &fun)
         # pp :stream_node => {:bt => bt, :reds => reds, :pointer_info => pointer_info, :start_key => start_key, :dir => dir, :acc => acc}
-        pointer, _reds  = pointer_info
+        pointer, _reds  = *pointer_info
         # p :stream_node => { :_reds => _reds, :pointer => pointer }
 
         return :ok, acc if pointer_info.nil?
